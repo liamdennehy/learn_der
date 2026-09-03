@@ -1,0 +1,13 @@
+[package]
+name = "learn_der"
+version = "0.1.0"
+edition = "2024"
+authors = ["Liam Dennehy <liam@wiemax.net>"]
+license = "GPL-3.0-or-later"
+keywords = ["DER", "ASN.1"]
+description = "A simple project to explore Rust coding and DER encoding"
+
+[dependencies]
+hex = "0.4"
+base64 = "0.23"
+thiserror = "2.0"
