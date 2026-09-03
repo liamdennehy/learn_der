@@ -27,15 +27,15 @@ pub enum DerError {
     #[error("Wrong Tag: expected {expected}, found {found}")]
     WrongTag { expected: String, found: String },
 
-    #[error("Unknown Tag: found {found:#x}")]
-    UnknownTag { found: u8 },
+    // #[error("Unknown Tag: found {found:#x}")]
+    // UnknownTag { found: u8 },
 
-    #[error("Custom Error: {0}")]
-    Custom(String),
+    // #[error("Custom Error: {0}")]
+    // Custom(String),
 }
 
 /// A convenient type alias for Results
-pub type Result<T> = std::result::Result<T, DerError>;
+// pub type Result<T> = std::result::Result<T, DerError>;
 
 #[derive(Debug, Error)]
 pub enum ShoppingItemError {

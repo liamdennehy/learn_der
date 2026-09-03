@@ -80,14 +80,14 @@ impl ShoppingItem {
 
         // 1. Check and consume the outer SEQUENCE tag
         
-        let tag = match parser.expect_tag(Tag::Sequence) {
-            Ok(found) => found,
+        match parser.expect_tag(Tag::Sequence) {
+            Ok(..) => (),
             Err(e) => return Err(ShoppingItemError::DerError { der_error: format!("ShoppingItem Parse Error: {}", e) }),
             };
 
 
-        let content_len = match parser.read_length() {
-            Some(len) => len,
+        match parser.read_length() {
+            Some(..) => (),
             None => return Err(ShoppingItemError::DerError { der_error: "Invalid Length for ShoppingItem".to_string() })
         };
 
@@ -151,7 +151,7 @@ impl ShoppingItem {
         let quantity: u32 = match parser.read_length() {
             Some(length) => {
                 match parser.read_value(length) {
-                    Some(bytes) => match (bytes.len()) {
+                    Some(bytes) => match bytes.len() {
                         4 => match bytes.try_into() {
                             Ok(value) => u32::from_be_bytes(value),
                             Err(..) => return Err(ShoppingItemError::DerError { der_error: "Couldn't coerce Quantity to a u32".to_string() })
@@ -166,7 +166,7 @@ impl ShoppingItem {
 
 
         // 5. Parse Description (Optional)
-        let mut description: Option<String> = None;
+        // let description: Option<String> = None;
         
         // Check if there are more bytes left in the SEQUENCE content.
         // If parser.has_more() is true, the next byte should be a Description tag.

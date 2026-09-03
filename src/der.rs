@@ -1,5 +1,3 @@
-use std::io::Bytes;
-
 use crate::der::Tag::Sequence;
 use crate::errors::DerError;
 
@@ -131,14 +129,14 @@ impl Parser {
         Some(value)
     }
 
-    pub fn read_pos(&self) -> usize {
-        self.pos
-    }  
+    // pub fn read_pos(&self) -> usize {
+    //     self.pos
+    // }  
 
-    /// Returns the remaining bytes (useful for debugging or nested structures)
-    pub fn remaining(&self) -> &[u8] {
-        &self.buffer[self.pos..]
-    }
+    // /// Returns the remaining bytes (useful for debugging or nested structures)
+    // pub fn remaining(&self) -> &[u8] {
+    //     &self.buffer[self.pos..]
+    // }
 }
 
 

@@ -3,8 +3,6 @@ mod shopping_item;
 mod errors;
 mod helpers;
 
-use std::fs;
-use std::io;
 use shopping_item::ShoppingItem;
 use crate::helpers::{write_file, print_base64, read_file, print_item_details};
 
