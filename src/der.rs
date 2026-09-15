@@ -7,6 +7,7 @@ pub enum DERTag {
     Integer,
     OctetString,
     UTF8String,
+    PrintableString,
     ErrUnknown(u8),
     // We can add more later if needed (e.g., Boolean, Null, etc.)
 }
@@ -18,6 +19,8 @@ impl DERTag {
             0x30 => Ok(DERTag::Sequence),
             0x02 => Ok(DERTag::Integer),
             0x04 => Ok(DERTag::OctetString),
+            0x0c => Ok(DERTag::UTF8String),
+            0x13 => Ok(DERTag::PrintableString),
             _ => Err(DerError::UnknownTag { found: this_byte }),
         }
     }
@@ -29,6 +32,7 @@ impl DERTag {
             DERTag::Integer => 0x02,
             DERTag::OctetString => 0x04,
             DERTag::UTF8String => 0x0c,
+            DERTag::PrintableString => 0x13,
             DERTag::ErrUnknown(unknown_byte)=> *unknown_byte
         }
     }
@@ -39,6 +43,7 @@ impl DERTag {
             DERTag::Integer => format!("Integer({:#02x})", self.to_byte()).to_string(),
             DERTag::OctetString => format!("OctetString({:#02x})", self.to_byte()).to_string(),
             DERTag::UTF8String => format!("UTF8String({:#02x})", self.to_byte()).to_string(),
+            DERTag::PrintableString => format!("PrintableString({:#02x})", self.to_byte()).to_string(),
             DERTag::ErrUnknown(unknown_byte)=> format!("Unknown({:#04x})", unknown_byte).to_string(),
         }
     }
@@ -196,5 +201,18 @@ pub struct Encoder {
     pub tag: DERTag,
     pub lenth: u128,
     pub value: DERValue
+}
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tag_from_byte() {
+        match DERTag::from_byte(0x30) { Ok(DERTag::Sequence) => {}, _ => panic!() }
+        match DERTag::from_byte(0x02) { Ok(DERTag::Integer) => {}, _ => panic!() }
+        match DERTag::from_byte(0x0c) { Ok(DERTag::UTF8String) => {}, _ => panic!() }
+        match DERTag::from_byte(0x13) { Ok(DERTag::PrintableString) => {}, _ => panic!() }
+        assert!(DERTag::from_byte(0xff).is_err());
+    }
 }

@@ -1,8 +1,6 @@
-use crate::der::Parser;
-use crate::der::DERTag;
+use crate::asn1::ASN1Element;
 use crate::errors::ShoppingItemError;
 
-const UNIT_SIZE: usize = 16;
 const MAX_NAME_LEN: usize = 255;
 const MAX_DESC_LEN: usize = 65535;
 
@@ -22,12 +20,16 @@ impl ShoppingItem {
         description: Option<String>,
     ) -> Result<Self, ShoppingItemError> {
         if name.len() > MAX_NAME_LEN {
-            return Err(ShoppingItemError::InputError{ input_error: format!("Name too long, max {}",MAX_NAME_LEN).to_string()});
+            return Err(ShoppingItemError::InputError {
+                input_error: format!("Name too long, max {}", MAX_NAME_LEN),
+            });
         }
 
         if let Some(ref desc) = description {
             if desc.len() > MAX_DESC_LEN {
-            return Err(ShoppingItemError::InputError{ input_error: format!("Description too long, max {}",MAX_NAME_LEN).to_string()});
+                return Err(ShoppingItemError::InputError {
+                    input_error: format!("Description too long, max {}", MAX_DESC_LEN),
+                });
             }
         }
 
@@ -39,232 +41,227 @@ impl ShoppingItem {
         })
     }
 
+    /// Serializes the ShoppingItem into a DER byte sequence.
+    pub fn to_der(&self) -> Vec<u8> {
+        // Build the SEQUENCE contents as ASN1Elements
+        let mut children: Vec<ASN1Element> = Vec::new();
 
-    //     let mut content = Vec::new();
+        // Name as UTF8String
+        children.push(ASN1Element::UTF8String(self.name.clone()));
 
-    //     // 1. Name (OCTET STRING - Tag 0x04)
-    //     content.push(Tag::OctetString.to_byte());
-    //     content.extend_from_slice(&crate::der::encode_length(self.name.len()));
-    //     content.extend_from_slice(self.name.as_bytes());
+        // Unit as OCTET STRING (V1 spec)
+        children.push(ASN1Element::OctetString(self.unit.as_bytes().to_vec()));
 
-    //     // 2. Unit (OCTET STRING - Tag 0x04)
-    //     content.push(Tag::OctetString.to_byte());
-    //     content.push(UNIT_SIZE as u8); 
-    //     content.extend_from_slice(self.unit);
+        // Quantity as INTEGER
+        children.push(ASN1Element::Integer(self.quantity as i128));
 
-    //     // 3. Quantity (INTEGER - Tag 0x02)
-    //     content.push(Tag::Integer.to_byte());
-    //     content.push(0x04); 
-    //     content.extend_from_slice(&self.quantity.to_be_bytes());
+        // Description (optional)
+        if let Some(ref desc) = self.description {
+            children.push(ASN1Element::UTF8String(desc.clone()));
+        }
 
-    //     // 4. Description (Optional OCTET STRING - Tag 0x04)
-    //     if let Some(ref desc) = self.description {
-    //         content.push(Tag::OctetString.to_byte());
-    //         content.extend_from_slice(&crate::der::encode_length(desc.len()));
-    //         content.extend_from_slice(desc.as_bytes());
-    //     }
+        // Wrap in SEQUENCE
+        let sequence = ASN1Element::Sequence(children);
 
-    //     // 5. Wrap in SEQUENCE (Tag 0x30)
-    //     let mut der = Vec::new();
-    //     der.push(Tag::Sequence.to_byte());
-    //     der.extend_from_slice(&crate::der::encode_length(content.len()));
-    //     der.extend_from_slice(&content);
+        // Encode to DER bytes
+        sequence.to_der().expect("Failed to encode ShoppingItem to DER")
+    }
 
-    //     der
-    // }
+    /// Parses a ShoppingItem from a DER byte sequence.
+    pub fn from_der(data: Vec<u8>) -> Result<Self, ShoppingItemError> {
+        // Parse the outer SEQUENCE
+        let (element, _pos) = ASN1Element::from_der(&data, 0)
+            .map_err(|e| ShoppingItemError::DerError {
+                der_error: format!("Failed to parse outer SEQUENCE: {}", e),
+            })?;
 
+        let children = match element {
+            ASN1Element::Sequence(children) => children,
+            other => {
+                return Err(ShoppingItemError::DerError {
+                    der_error: format!(
+                        "Expected SEQUENCE, found {}",
+                        other.tag().to_name()
+                    ),
+                })
+            }
+        };
 
-    //     let mut parser = Parser::new(der);
+        if children.is_empty() {
+            return Err(ShoppingItemError::DerError {
+                der_error: "SEQUENCE is empty".to_string(),
+            });
+        }
 
-    //     // 1. Check and consume the outer SEQUENCE tag
-        
-    //     match parser.expect_tag(Tag::Sequence) {
-    //         Ok(..) => (),
-    //         Err(e) => return Err(ShoppingItemError::DerError { der_error: format!("ShoppingItem Parse Error: {}", e) }),
-    //         };
+        // 1. Name — UTF8String
+        let name = match &children[0] {
+            ASN1Element::UTF8String(s) => s.clone(),
+            other => {
+                return Err(ShoppingItemError::DerError {
+                    der_error: format!(
+                        "Expected UTF8String for name, found {}",
+                        other.tag().to_name()
+                    ),
+                })
+            }
+        };
 
+        if name.len() > MAX_NAME_LEN {
+            return Err(ShoppingItemError::InputError {
+                input_error: format!("Name too long, max {}", MAX_NAME_LEN),
+            });
+        }
 
-    //     match parser.read_length() {
-    //         Some(..) => (),
-    //         None => return Err(ShoppingItemError::DerError { der_error: "Invalid Length for ShoppingItem".to_string() })
-    //     };
+        // 2. Unit — OCTET STRING (V1 spec)
+        let unit = match &children[1] {
+            ASN1Element::OctetString(bytes) => String::from_utf8(bytes.clone()).map_err(|_| ShoppingItemError::DerError {
+                der_error: "Unit contains invalid UTF-8".to_string(),
+            })?,
+            other => {
+                return Err(ShoppingItemError::DerError {
+                    der_error: format!(
+                        "Expected OctetString for unit, found {}",
+                        other.tag().to_name()
+                    ),
+                })
+            }
+        };
 
-    //     // 2. Parse Name
-    //     match parser.expect_tag(Tag::OctetString) {
-    //         Err(e) => return Err(ShoppingItemError::DerError { der_error: format!("ShoppingItem Parse Error on Name: {}", e) }),
-    //         _ => ()
-    //     };
+        // 3. Quantity — INTEGER
+        let quantity = match &children[2] {
+            ASN1Element::Integer(v) => {
+                if *v < 0 {
+                    return Err(ShoppingItemError::DerError {
+                        der_error: "Quantity must be non-negative".to_string(),
+                    });
+                }
+                *v as u64
+            }
+            other => {
+                return Err(ShoppingItemError::DerError {
+                    der_error: format!(
+                        "Expected INTEGER for quantity, found {}",
+                        other.tag().to_name()
+                    ),
+                })
+            }
+        };
 
-    //     let name_len = match parser.read_length() {
-    //         Some(length) => length,
-    //         None => return Err(ShoppingItemError::DerError { der_error: "Invalid Length for ShoppingItem name".to_string() }),
-    //         // _ => ()
-    //     };
-    //     let name_bytes = match parser.read_value(name_len) {
-    //         Some(bytes) => bytes,
-    //         _ => return Err(ShoppingItemError::DerError { der_error:"Can't read ShoppingItem name from DER".to_string()})
-    //     };
-        
-    //     let name = match String::from_utf8(name_bytes) {
-    //         Err(..) => return Err(ShoppingItemError::DerError { der_error: "Can't get UTF-8 from ShoppingItem Name".to_string() }),
-    //         Ok(s) => {
-    //             if s.len() > MAX_NAME_LEN {
-    //                 return Err(ShoppingItemError::DerError {der_error: "ShoppingItem Name too long".to_string()});
-    //             } else { s }
-    //         }
-    //     };
+        // 4. Description — optional UTF8String
+        let description = if children.len() > 3 {
+            match &children[3] {
+                ASN1Element::UTF8String(s) => Some(s.clone()),
+                other => {
+                    return Err(ShoppingItemError::DerError {
+                        der_error: format!(
+                            "Expected UTF8String for description, found {}",
+                            other.tag().to_name()
+                        ),
+                    })
+                }
+            }
+        } else {
+            None
+        };
 
-    //     // 3. Parse Unit
-    //     match parser.expect_tag(Tag::OctetString) {
-    //         Err(e) => return Err(ShoppingItemError::DerError { der_error: format!("ShoppingItem Parse Error on Unit: {}", e) }),
-    //         _ => ()
-    //     };
-
-    //     let unit_len = match parser.read_length(){
-    //         None => return Err(ShoppingItemError::DerError {der_error: "Couldn't find a length for the units".to_string()}),
-    //         Some(length) => {
-    //             if length != UNIT_SIZE {
-    //                 return Err(ShoppingItemError::DerError {der_error: format!("Unit size mismatch: expected {}, found {}", UNIT_SIZE, length)});
-    //             } else {
-    //                 length
-    //             }
-    //         }
-    //     };
-
-    //     let unit: [u8; UNIT_SIZE] = match parser.read_value(unit_len) {
-    //         None => return Err(ShoppingItemError::DerError {der_error: "Nothing found in Unit string".to_string()}),
-    //         Some(value) => match value.try_into() {
-    //             Err(_) => return Err(ShoppingItemError::DerError { der_error: "Couldn't coerce units into an integer".to_string() }),
-    //             Ok(value) => value,
-    //         },
-    //     };
-
-    //     // 4. Parse Quantity
-
-    //     match parser.expect_tag(Tag::Integer) {
-    //         Err(e) => return Err(ShoppingItemError::DerError { der_error: format!("ShoppingItem Parse Error on Quantity: {}", e) }),
-    //         _ => ()
-    //     };
-
-    //     let quantity: u32 = match parser.read_length() {
-    //         Some(length) => {
-    //             match parser.read_value(length) {
-    //                 Some(bytes) => match bytes.len() {
-    //                     4 => match bytes.try_into() {
-    //                         Ok(value) => u32::from_be_bytes(value),
-    //                         Err(..) => return Err(ShoppingItemError::DerError { der_error: "Couldn't coerce Quantity to a u32".to_string() })
-    //                     },
-    //                     _ => return Err(ShoppingItemError::DerError { der_error: format!("ShoppingItem Parse Error: {}", DerError::InvalidLength { expected: 4, found: bytes.len() }) })
-    //                 }
-    //                 None => return Err(ShoppingItemError::DerError {der_error: "Could not read Quantity bytes".to_string()}),
-    //             }
-    //         },
-    //         None => return Err(ShoppingItemError::DerError {der_error: "Couldn't find a length for the quantity".to_string()}),
-    //     };
-
-
-    //     // 5. Parse Description (Optional)
-    //     // let description: Option<String> = None;
-        
-    //     // Check if there are more bytes left in the SEQUENCE content.
-    //     // If parser.has_more() is true, the next byte should be a Description tag.
-    //     let description: Option<String> = match parser.has_more() {
-    //         true => {
-    //             match parser.expect_tag(Tag::OctetString) {
-    //                 Err(e) => return Err(ShoppingItemError::DerError { der_error: format!("ShoppingItem Parse Error on Descroption: {}", e) }),
-    //                 Ok(..) => match parser.read_length() {
-    //                     None => return Err(ShoppingItemError::DerError {der_error: "Couldn't find a length for the quantity".to_string()}),
-    //                     Some(length) => {
-    //                         if length > MAX_DESC_LEN {
-    //                             return Err(ShoppingItemError::DerError { der_error: format!("ShoppingItem Parse Error: {}", DerError::InvalidLength { expected: 4, found: length }) })
-    //                         };
-    //                         match parser.read_value(length) {
-    //                             None => return Err(ShoppingItemError::DerError { der_error: "Invalid Length for ShoppingItem name".to_string() }),
-    //                             Some(bytes) => match String::from_utf8(bytes) {
-    //                                 Ok(string) => Some(string),
-    //                                 Err(e) => return Err(ShoppingItemError::DerError { der_error: format!("ShoppingItem Parse Error on Descroption: {}", e) }),
-    //                             }
-    //                         }
-
-    //                     }
-                        
-    //                 }
-    //             }
-    //         },
-    //         false => None
-    //     };
-
-    //     Ok(ShoppingItem {
-    //         name,
-    //         unit,
-    //         quantity,
-    //         description,
-    //     })
-    // }
-
-
+        Ok(ShoppingItem {
+            name,
+            unit,
+            quantity,
+            description,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq; // Shadows standard assert_eq!
+    use pretty_assertions::assert_eq;
+
+    // DER fixture: ShoppingItem { name: "Milk", unit: "unit_test_123456", quantity: 2, description: Some("Organic, 1 gallon") }
+    // Structure: SEQUENCE { UTF8String("Milk"), OctetString("unit_test_123456"), INTEGER(2), UTF8String("Organic, 1 gallon") }
+    const DER_WITH_DESCRIPTION: &[u8] = &[
+        0x30, 0x2e, // SEQUENCE (length 46)
+        0x0c, 0x04, // UTF8String (length 4): "Milk"
+        0x4d, 0x69, 0x6c, 0x6b,
+        0x04, 0x10, // OctetString (length 16): "unit_test_123456"
+        0x75, 0x6e, 0x69, 0x74, 0x5f, 0x74, 0x65, 0x73, 0x74, 0x5f, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36,
+        0x02, 0x01, // INTEGER (length 1): 2
+        0x02,
+        0x0c, 0x11, // UTF8String (length 17): "Organic, 1 gallon"
+        0x4f, 0x72, 0x67, 0x61, 0x6e, 0x69, 0x63, 0x2c, 0x20, 0x31, 0x20, 0x67, 0x61, 0x6c, 0x6c, 0x6f, 0x6e,
+    ];
+
+    // DER fixture: ShoppingItem { name: "Bread", unit: "unit_test_123456", quantity: 1, description: None }
+    // Structure: SEQUENCE { UTF8String("Bread"), OctetString("unit_test_123456"), INTEGER(1) }
+    const DER_WITHOUT_DESCRIPTION: &[u8] = &[
+        0x30, 0x1c, // SEQUENCE (length 28)
+        0x0c, 0x05, // UTF8String (length 5): "Bread"
+        0x42, 0x72, 0x65, 0x61, 0x64,
+        0x04, 0x10, // OctetString (length 16): "unit_test_123456"
+        0x75, 0x6e, 0x69, 0x74, 0x5f, 0x74, 0x65, 0x73, 0x74, 0x5f, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36,
+        0x02, 0x01, // INTEGER (length 1): 1
+        0x01,
+    ];
 
     #[test]
     fn test_round_trip() {
-        // 1. Create the original item
-        let unit = "unit_test_123456".to_string(); 
+        let unit = "unit_test_123456".to_string();
         let original = ShoppingItem::new(
             "Milk".to_string(),
             unit,
             2,
             Some("Organic, 1 gallon".to_string()),
-        ).unwrap();
+        )
+        .unwrap();
 
-        // // 2. Serialize to DER
-        // let der = original.to_der();
-        
-        // // 3. Deserialize from DER
-        // let parsed = ShoppingItem::from_der(der).unwrap();
+        // Verify to_der() produces the expected fixture bytes
+        let der = original.to_der();
+        assert_eq!(&der, DER_WITH_DESCRIPTION);
 
-        // // 4. Assert they are equal
-        // assert_eq!(original, parsed);
+        // Verify from_der() parses the fixture back correctly
+        let parsed = ShoppingItem::from_der(DER_WITH_DESCRIPTION.to_vec()).unwrap();
+        let expected = ShoppingItem::new(
+            "Milk".to_string(),
+            "unit_test_123456".to_string(),
+            2,
+            Some("Organic, 1 gallon".to_string()),
+        )
+        .unwrap();
+        assert_eq!(parsed, expected);
+
+        // Full round-trip: encode then decode
+        let parsed_roundtrip = ShoppingItem::from_der(der).unwrap();
+        assert_eq!(original, parsed_roundtrip);
     }
 
     #[test]
     fn test_without_optional_description() {
-        let unit = "unit_test_123456".to_string(); 
         let original = ShoppingItem::new(
             "Bread".to_string(),
-            unit,
+            "unit_test_123456".to_string(),
             1,
-            None, // No description
-        ).unwrap();
+            None,
+        )
+        .unwrap();
 
-        // let der = original.to_der();
-        // let parsed = ShoppingItem::from_der(der).unwrap();
+        // Verify to_der() produces the expected fixture bytes
+        let der = original.to_der();
+        assert_eq!(&der, DER_WITHOUT_DESCRIPTION);
 
-        // assert_eq!(original, parsed);
-        // assert!(parsed.description.is_none());
+        // Verify from_der() parses the fixture back correctly
+        let parsed = ShoppingItem::from_der(DER_WITHOUT_DESCRIPTION.to_vec()).unwrap();
+        assert_eq!(parsed, original);
+        assert!(parsed.description.is_none());
+
+        // Full round-trip: encode then decode
+        let parsed_roundtrip = ShoppingItem::from_der(der).unwrap();
+        assert_eq!(original, parsed_roundtrip);
     }
 
     #[test]
-    fn test_construct_asn1() {
-        let name = "Whole Milk".to_string();
-        let unit = "Pint".to_string();
-        let quantity = 2;
-        let name_element = ASN1Element::UTF8String(name);
-        let unit_element = ASN1Element::UTF8String(unit);
-        let quantity_element = ASN1Element::Integer(quantity);
-        eprintln!("Some value {}", quantity);
-        println!("Some value {}", quantity);
-        match quantity_element.to_der() {
-            Err(..) => panic!("Got an error!"),
-            Ok(result) => assert_eq!(result, vec![0x02, 0x01, 0x02])
-            
-        }
-        
-
-
+    fn test_asn1_integer_encoding() {
+        let quantity_element = ASN1Element::Integer(2);
+        assert_eq!(quantity_element.to_der().unwrap(), vec![0x02, 0x01, 0x02]);
     }
 }

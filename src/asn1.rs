@@ -123,10 +123,13 @@ impl ASN1Element {
             },
             DERTag::Sequence => {
                 let bytes = value.ok_or(DerError::UnexpectedEndOfData { pos })?;
+                eprintln!("  [asn1] parsing SEQUENCE with {} inner bytes", bytes.len());
                 let mut elements = Vec::new();
                 let mut cursor = 0;
                 while cursor < bytes.len() {
+                    eprintln!("  [asn1]   cursor={}, next_byte={:#04x}", cursor, bytes[cursor]);
                     let (elem, next) = ASN1Element::from_der(&bytes, cursor)?;
+                    eprintln!("  [asn1]   parsed {:?}, next={}", elem, next);
                     elements.push(elem);
                     cursor = next;
                 }
