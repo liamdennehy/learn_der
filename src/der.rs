@@ -1,48 +1,64 @@
-use crate::der::Tag::Sequence;
+// use crate::der::Tag::Sequence;
 use crate::errors::DerError;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Tag {
+pub enum DERTag {
     Sequence,
     Integer,
     OctetString,
+    UTF8String,
     ErrUnknown(u8),
     // We can add more later if needed (e.g., Boolean, Null, etc.)
 }
 
-impl Tag {
+impl DERTag {
     /// Converts a raw byte tag into a Tag enum
-    pub fn from_byte(this_byte: u8) -> Self {
+    pub fn from_byte(this_byte: u8) -> Result<Self,DerError> {
         match this_byte {
-            0x30 => Tag::Sequence,
-            0x02 => Tag::Integer,
-            0x04 => Tag::OctetString,
-            _ => Tag::ErrUnknown(this_byte),
+            0x30 => Ok(DERTag::Sequence),
+            0x02 => Ok(DERTag::Integer),
+            0x04 => Ok(DERTag::OctetString),
+            _ => Err(DerError::UnknownTag { found: this_byte }),
         }
     }
 
     /// Returns the raw byte value for the tag
     pub fn to_byte(&self) -> u8 {
         match self {
-            Tag::Sequence => 0x30,
-            Tag::Integer => 0x02,
-            Tag::OctetString => 0x04,
-            Tag::ErrUnknown(unknown_byte)=> *unknown_byte
+            DERTag::Sequence => 0x30,
+            DERTag::Integer => 0x02,
+            DERTag::OctetString => 0x04,
+            DERTag::UTF8String => 0x0c,
+            DERTag::ErrUnknown(unknown_byte)=> *unknown_byte
         }
     }
 
     pub fn to_name(&self) -> String {
         match self {
-            Tag::Sequence => format!("Sequence({:#02x})", Sequence.to_byte()).to_string(),
-            Tag::Integer => format!("Integer({:#02x})", Sequence.to_byte()).to_string(),
-            Tag::OctetString => format!("OctetString({:#02x})", Sequence.to_byte()).to_string(),
-            // Tag::Sequence => "Sequence".to_string(),
-            // Tag::Integer => "Integer".to_string(),
-            // Tag::OctetString => "OctetString".to_string(),
-            Tag::ErrUnknown(unknown_byte)=> format!("Unknown({:#04x})", unknown_byte).to_string(),
+            DERTag::Sequence => format!("Sequence({:#02x})", self.to_byte()).to_string(),
+            DERTag::Integer => format!("Integer({:#02x})", self.to_byte()).to_string(),
+            DERTag::OctetString => format!("OctetString({:#02x})", self.to_byte()).to_string(),
+            DERTag::UTF8String => format!("UTF8String({:#02x})", self.to_byte()).to_string(),
+            DERTag::ErrUnknown(unknown_byte)=> format!("Unknown({:#04x})", unknown_byte).to_string(),
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DERValue {
+    Integer(i128),
+    OctetString(String),
+    BitString(Vec<u8>),
+    Boolean(bool),
+    UTF8String(String),
+    PrintableString(String),
+    IA5String(String),
+    UTCTime,
+    GeneralizedTime,
+    ObjectIdentifier,
+    Null,
+}
+
 
 /// A simple reader that holds the buffer and current position.
 #[derive(Debug)]
@@ -63,15 +79,14 @@ impl Parser {
     }
 
     /// Consumes the current byte.
-    pub fn next(&mut self) -> Option<u8> {
+    pub fn next(&mut self) -> Result<u8,DerError> {
         let result = self.peek();
         match result {
             Some(byte) => {
                 self.pos += 1;
-                Some(byte)
+                Ok(byte)
             },
-            None => None
-            
+            None => Err(DerError::UnexpectedEndOfData { pos: self.pos })
         }
     }
 
@@ -81,15 +96,20 @@ impl Parser {
     }
 
     /// Reads a Tag.
-    pub fn read_tag(&mut self) -> Result<Tag, DerError> {
+    pub fn read_tag(&mut self) -> Result<DERTag, DerError> {
         let byte = self.next();
         match byte {
-            Some(byte) => Ok(Tag::from_byte(byte)),
-            _ => Err(DerError::UnexpectedEndOfData { pos: self.pos })
+            Ok(byte) => 
+                match DERTag::from_byte(byte) {
+                    Ok(tag) => Ok(tag),
+                    Err(e) => Err(e)
+                },
+               Err(e) => Err(e)
+            }
         }
-    }
 
-    pub fn expect_tag(&mut self, expected: Tag) -> Result<Tag, DerError> {
+
+    pub fn expect_tag(&mut self, expected: DERTag) -> Result<DERTag, DerError> {
         
         let result = self.read_tag();
         match result {
@@ -105,33 +125,48 @@ impl Parser {
     }
         
     /// Reads the Length field according to DER rules.
-    pub fn read_length(&mut self) -> Option<usize> {
-        let len_byte = self.next()?;
-        if len_byte < 128 {
-            Some(len_byte as usize)
-        } else {
-            let num_len_bytes = (len_byte & 0x7F) as usize;
-            let mut length = 0usize;
-            for _ in 0..num_len_bytes {
-                let byte = self.next()? as usize;
-                length = (length << 8) | byte;
-            }
-            Some(length)
-        }
+    pub fn read_length(&mut self) -> Result<usize,DerError> {
+        let length: usize = match self.next() {
+            Err(e) => return Err(e),
+            Ok(first_byte) => {
+                if first_byte < 128 {
+                    usize::from(first_byte)
+                } else {
+                    let num_len_bytes: u8 = first_byte & 0x7F;
+                    let mut calc_length: usize = 0;
+                    for _ in 0..num_len_bytes {
+                        match self.next() {
+                            Err(e) => return Err(e),
+                            Ok(this_byte) => calc_length = (calc_length << 8) | usize::from(this_byte)
+                        }
+                    }
+                    calc_length
+                }
+            } 
+        };
+        return Ok(length);
     }
 
     /// Reads exactly `len` bytes as the Value.
-    pub fn read_value(&mut self, len: usize) -> Option<Vec<u8>> {
-        let mut value = Vec::with_capacity(len);
-        for _ in 0..len {
-            value.push(self.next()?);
+    pub fn read_value(&mut self, len: usize) -> Result<Option<Vec<u8>>,DerError> {
+        if len > 0 {
+            let mut value = Vec::with_capacity(len);
+            for _ in 0..len {
+                value.push(match self.next() {
+                    Err(e) => return Err(e),
+                    Ok(byte) => byte
+                });
+            }
+            Ok(Some(value))
+
+        } else {
+            Ok(None)
         }
-        Some(value)
     }
 
-    // pub fn read_pos(&self) -> usize {
-    //     self.pos
-    // }  
+    pub fn read_pos(&self) -> usize {
+        self.pos
+    }  
 
     // /// Returns the remaining bytes (useful for debugging or nested structures)
     // pub fn remaining(&self) -> &[u8] {
@@ -155,4 +190,11 @@ pub fn encode_length(len: usize) -> Vec<u8> {
         result.extend_from_slice(&len_bytes[start..]);
         result
     }
+}
+
+pub struct Encoder {
+    pub tag: DERTag,
+    pub lenth: u128,
+    pub value: DERValue
+
 }

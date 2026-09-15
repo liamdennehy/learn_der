@@ -27,8 +27,8 @@ pub enum DerError {
     #[error("Wrong Tag: expected {expected}, found {found}")]
     WrongTag { expected: String, found: String },
 
-    // #[error("Unknown Tag: found {found:#x}")]
-    // UnknownTag { found: u8 },
+    #[error("Unknown Tag: found {found:#x}")]
+    UnknownTag { found: u8 },
 
     // #[error("Custom Error: {0}")]
     // Custom(String),

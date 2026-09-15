@@ -11,3 +11,6 @@ description = "A simple project to explore Rust coding and DER encoding"
 hex = "0.4"
 base64 = "0.23"
 thiserror = "2.0"
+
+[dev-dependencies]
+pretty_assertions = "1.4"
