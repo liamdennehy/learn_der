@@ -245,44 +245,44 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     // V2 DER fixture with description:
-    // SEQUENCE { version=2, name="Milk", unit="gallon", quantity=2, desc="Organic, 1 gallon" }
+    // SEQUENCE { version=2, name="Milk", unit="L", quantity=2, desc="Organic" }
     //
     // Wire format:
-    //   0x30 0x27                     -- SEQUENCE (39 bytes)
+    //   0x30 0x18                     -- SEQUENCE (24 bytes)
     //   0x02 0x01 0x02                -- INTEGER 2 (version)
     //   0x0c 0x04 4d 69 6c 6b         -- UTF8String "Milk"
-    //   0x13 0x06 67 61 6c 6c 6f 6e   -- PrintableString "gallon"
+    //   0x13 0x01 4c                   -- PrintableString "L"
     //   0x02 0x01 0x02                -- INTEGER 2 (quantity)
-    //   0x0c 0x11 4f 72...           -- UTF8String "Organic, 1 gallon"
+    //   0x0c 0x07 4f 72...           -- UTF8String "Organic"
     const DER_WITH_DESCRIPTION: &[u8] = &[
-        0x30, 0x27, // SEQUENCE (length 39)
+        0x30, 0x18, // SEQUENCE (length 24)
         0x02, 0x01, 0x02, // INTEGER 2 (version)
         0x0c, 0x04, // UTF8String (length 4): "Milk"
         0x4d, 0x69, 0x6c, 0x6b,
-        0x13, 0x06, // PrintableString (length 6): "gallon"
-        0x67, 0x61, 0x6c, 0x6c, 0x6f, 0x6e,
+        0x13, 0x01, // PrintableString (length 1): "L"
+        0x4c,
         0x02, 0x01, // INTEGER (length 1): 2 (quantity)
         0x02,
-        0x0c, 0x11, // UTF8String (length 17): "Organic, 1 gallon"
-        0x4f, 0x72, 0x67, 0x61, 0x6e, 0x69, 0x63, 0x2c, 0x20, 0x31, 0x20, 0x67, 0x61, 0x6c, 0x6c, 0x6f, 0x6e,
+        0x0c, 0x07, // UTF8String (length 7): "Organic"
+        0x4f, 0x72, 0x67, 0x61, 0x6e, 0x69, 0x63,
     ];
 
     // V2 DER fixture without description:
-    // SEQUENCE { version=2, name="Bread", unit="gallon", quantity=1 }
+    // SEQUENCE { version=2, name="Bread", unit="loaf", quantity=1 }
     //
     // Wire format:
-    //   0x30 0x15                     -- SEQUENCE (21 bytes)
+    //   0x30 0x13                     -- SEQUENCE (19 bytes)
     //   0x02 0x01 0x02                -- INTEGER 2 (version)
     //   0x0c 0x05 42 72 65 61 64      -- UTF8String "Bread"
-    //   0x13 0x06 67 61 6c 6c 6f 6e   -- PrintableString "gallon"
+    //   0x13 0x04 6c 6f 61 66         -- PrintableString "loaf"
     //   0x02 0x01 0x01                -- INTEGER 1 (quantity)
     const DER_WITHOUT_DESCRIPTION: &[u8] = &[
-        0x30, 0x15, // SEQUENCE (length 21)
+        0x30, 0x13, // SEQUENCE (length 19)
         0x02, 0x01, 0x02, // INTEGER 2 (version)
         0x0c, 0x05, // UTF8String (length 5): "Bread"
         0x42, 0x72, 0x65, 0x61, 0x64,
-        0x13, 0x06, // PrintableString (length 6): "gallon"
-        0x67, 0x61, 0x6c, 0x6c, 0x6f, 0x6e,
+        0x13, 0x04, // PrintableString (length 4): "loaf"
+        0x6c, 0x6f, 0x61, 0x66,
         0x02, 0x01, // INTEGER (length 1): 1 (quantity)
         0x01,
     ];
@@ -294,9 +294,9 @@ mod tests {
         let item = ShoppingItem::new(
             2,
             "Milk".to_string(),
-            "gallon".to_string(),
+            "L".to_string(),
             2,
-            Some("Organic, 1 gallon".to_string()),
+            Some("Organic".to_string()),
         )
         .unwrap();
 
@@ -318,7 +318,7 @@ mod tests {
         let item = ShoppingItem::new(
             2,
             "Bread".to_string(),
-            "gallon".to_string(),
+            "loaf".to_string(),
             1,
             None,
         )
@@ -343,7 +343,7 @@ mod tests {
         let item = ShoppingItem::new(
             2,
             "Apples".to_string(),
-            "pint".to_string(),
+            "item".to_string(),
             5,
             None,
         )
@@ -365,7 +365,7 @@ mod tests {
         let result = ShoppingItem::new(
             1,  // wrong version
             "Milk".to_string(),
-            "gallon".to_string(),
+            "L".to_string(),
             1,
             None,
         );
@@ -379,12 +379,12 @@ mod tests {
     fn test_version_validation_in_from_der() {
         // Manually craft DER with version=1 instead of version=2
         let der = vec![
-            0x30, 0x14, // SEQUENCE (20 bytes)
+            0x30, 0x0f, // SEQUENCE (15 bytes)
             0x02, 0x01, 0x01, // INTEGER 1 (version — WRONG)
             0x0c, 0x04, // UTF8String "Milk"
             0x4d, 0x69, 0x6c, 0x6b,
-            0x13, 0x06, // PrintableString "gallon"
-            0x67, 0x61, 0x6c, 0x6c, 0x6f, 0x6e,
+            0x13, 0x01, // PrintableString "L"
+            0x4c,
             0x02, 0x01, // INTEGER 1 (quantity)
             0x01,
         ];
@@ -405,7 +405,7 @@ mod tests {
         let item = ShoppingItem::new(
             2,
             "Milk".to_string(),
-            "gallon".to_string(),
+            "L".to_string(),
             1,
             None,
         )

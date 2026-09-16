@@ -95,7 +95,7 @@ impl ASN1Element {
     /// Decodes a DER-encoded ASN1Element from a byte buffer starting at `pos`.
     /// Returns the element and the new position after it.
     pub fn from_der(buffer: &[u8], pos: usize) -> Result<(Self, usize), DerError> {
-        let mut parser = Parser::new(buffer.to_vec());
+        let mut parser = Parser::new(buffer);
         // Skip to the right position
         for _ in 0..pos {
             parser.next()?;
@@ -190,7 +190,7 @@ mod tests {
     fn test_printable_string_valid_chars() {
         // All allowed characters
         assert!(is_valid_printable_string("Hello-World:123?"));
-        assert!(is_valid_printable_string(" gallon "));
+        assert!(is_valid_printable_string(" 2 L "));
         assert!(is_valid_printable_string("A-Z a-z 0-9 '+,-:=?"));
     }
 
@@ -209,10 +209,10 @@ mod tests {
 
     #[test]
     fn test_asn1_printable_string_to_der() {
-        let elem = ASN1Element::PrintableString("gallon".to_string());
+        let elem = ASN1Element::PrintableString("L".to_string());
         let der = elem.to_der().unwrap();
-        // tag=0x13, len=6, value="gallon"
-        assert_eq!(der, vec![0x13, 0x06, b'g', b'a', b'l', b'l', b'o', b'n']);
+        // tag=0x13, len=1, value="L"
+        assert_eq!(der, vec![0x13, 0x01, b'L']);
     }
 
     #[test]
@@ -223,11 +223,11 @@ mod tests {
 
     #[test]
     fn test_asn1_printable_string_from_der() {
-        // DER: tag=0x13, len=6, value="gallon"
-        let der = vec![0x13, 0x06, b'g', b'a', b'l', b'l', b'o', b'n'];
+        // DER: tag=0x13, len=1, value="L"
+        let der = vec![0x13, 0x01, b'L'];
         let (elem, pos) = ASN1Element::from_der(&der, 0).unwrap();
         assert_eq!(pos, der.len());
-        assert_eq!(elem, ASN1Element::PrintableString("gallon".to_string()));
+        assert_eq!(elem, ASN1Element::PrintableString("L".to_string()));
     }
 
     #[test]
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_asn1_printable_string_roundtrip() {
-        let original = "gallon".to_string();
+        let original = "L".to_string();
         let elem = ASN1Element::PrintableString(original.clone());
         let der = elem.to_der().unwrap();
         let (decoded, _) = ASN1Element::from_der(&der, 0).unwrap();
@@ -267,5 +267,57 @@ mod tests {
         let der = elem.to_der().unwrap();
         let (decoded, _) = ASN1Element::from_der(&der, 0).unwrap();
         assert_eq!(decoded, ASN1Element::Null);
+    }
+
+    // --- Malformed / adversarial input tests ---
+
+    /// A SEQUENCE that claims its inner content is 10 bytes but only provides 3.
+    /// Should fail when trying to read_value(10).
+    #[test]
+    fn test_sequence_length_exceeds_available_bytes() {
+        // tag=0x30 (SEQUENCE), len=10 (claims 10 bytes), but only 3 bytes follow
+        let malformed = vec![0x30, 0x0a, 0x02, 0x01, 0x01];
+        assert!(ASN1Element::from_der(&malformed, 0).is_err());
+    }
+
+    /// A SEQUENCE whose inner element claims a length that would extend beyond
+    /// the sequence's own declared boundaries.
+    #[test]
+    fn test_child_element_overreaches_parent_boundaries() {
+        // Outer SEQUENCE: tag=0x30, len=3 (inner content is 3 bytes)
+        // Inner content:  tag=0x02 (INTEGER), len=100 (claims 100 bytes of value!)
+        // But there's only 0 bytes of value before we run out.
+        // This tests that the child can't read past the parent's byte slice.
+        let malformed = vec![0x30, 0x03, 0x02, 0x64, 0x00];
+        // len=0x64 = 100 decimal, but only 0 value bytes follow
+        assert!(ASN1Element::from_der(&malformed, 0).is_err());
+    }
+
+    /// Truncated data: the input ends mid-element.
+    #[test]
+    fn test_truncated_integer_value() {
+        // INTEGER, length=5, but only 2 value bytes
+        let truncated = vec![0x02, 0x05, 0x01, 0x02];
+        assert!(ASN1Element::from_der(&truncated, 0).is_err());
+    }
+
+    /// Nested SEQUENCE with a deeply overreaching child.
+    #[test]
+    fn test_nested_sequence_child_overreach() {
+        // Outer SEQUENCE: tag=0x30, len=4
+        //   Inner SEQUENCE: tag=0x30, len=2
+        //     INTEGER: tag=0x02, len=100 (claims 100 bytes, only 0 available)
+        let malformed = vec![0x30, 0x04, 0x30, 0x02, 0x02, 0x64];
+        // Outer SEQUENCE wraps an inner SEQUENCE which wraps an INTEGER
+        // The INTEGER's length=100 exceeds what the inner SEQUENCE provides.
+        assert!(ASN1Element::from_der(&malformed, 0).is_err());
+    }
+
+    /// Skip position points past the end of the buffer.
+    #[test]
+    fn test_skip_position_beyond_buffer() {
+        let data = vec![0x05, 0x00]; // NULL
+        // Skip 100 positions into a 2-byte buffer
+        assert!(ASN1Element::from_der(&data, 100).is_err());
     }
 }
