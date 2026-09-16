@@ -40,20 +40,24 @@ ShoppingItem  ──calls──→  ASN1  ──calls──→  DER  ──→  
 - [x] `DERTag::PrintableString` variant added
 - [x] Architecture documentation written (`doc/architecture.md`)
 
-### Phase 3: Round-Trip (In Progress) 🚧
+### Phase 3: V1 Round-Trip ✅
 - [x] `ShoppingItem::to_der()` using ASN1Element bridge
 - [x] `ShoppingItem::from_der()` using ASN1Element bridge
 - [x] Test: round-trip with description
-- [ ] Test: round-trip without description
-- [ ] Test: ASN1 integer encoding
-- [ ] **Fix decoding bug** — `from_der()` fails on `PrintableString` tag `0x13` (encoding works fine)
+- [x] Test: round-trip without description
+- [x] Test: ASN1 integer encoding
+- [x] Wire-format fixture assertions (compile-time constants)
 
-### Phase 4: V2 Spec
-- [ ] Add `version: u32` field to `ShoppingItem`
-- [ ] Update `to_der()` / `from_der()` for V2 wire format
-- [ ] Add version validation
+### Phase 4: V2 Spec 🚧 (Next)
+- [ ] Add `version: u32` field to `ShoppingItem` (X.509 convention — first element)
+- [ ] Switch `unit` from `OCTET STRING` → `PrintableString` (tag `0x13`)
+- [ ] Fix `PrintableString` decoding path in `ASN1Element::from_der()`
+- [ ] Fix `ASN1Element::tag()` mapping: `PrintableString` → `DERTag::PrintableString`
+- [ ] Add `Null` tag support (`DERTag::Null`, `ASN1Element::Null`)
+- [ ] Version validation in `from_der()` (must be 2)
+- [ ] Update V1 fixture bytes + add V2 fixture tests
 
-### Phase 5: Extras
+### Phase 5: Extras (Deferred)
 - [ ] Context-specific tags (`[0]`, `[1]`)
 - [ ] OID support
 - [ ] File I/O helpers (write/read DER files)
