@@ -10,10 +10,10 @@ fn main() {
     println!("--- 1. Generating DER ---");
 
     // 1. Create the item
-    let unit = "unit_test_123456".to_string();
     let _item = ShoppingItem::new(
+        2,
         "Milk".to_string(),
-        unit,
+        "gallon".to_string(),
         2,
         Some("Organic, 1 gallon".to_string()),
     ).unwrap();
