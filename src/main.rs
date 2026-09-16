@@ -13,9 +13,9 @@ fn main() {
     let _item = ShoppingItem::new(
         2,
         "Milk".to_string(),
-        "gallon".to_string(),
+        "L".to_string(),
         2,
-        Some("Organic, 1 gallon".to_string()),
+        Some("Organic".to_string()),
     ).unwrap();
 
     // TODO: Implement to_der() and from_der(), then uncomment serialization.

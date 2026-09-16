@@ -190,7 +190,7 @@ mod tests {
     fn test_printable_string_valid_chars() {
         // All allowed characters
         assert!(is_valid_printable_string("Hello-World:123?"));
-        assert!(is_valid_printable_string(" gallon "));
+        assert!(is_valid_printable_string(" 2 L "));
         assert!(is_valid_printable_string("A-Z a-z 0-9 '+,-:=?"));
     }
 
@@ -209,10 +209,10 @@ mod tests {
 
     #[test]
     fn test_asn1_printable_string_to_der() {
-        let elem = ASN1Element::PrintableString("gallon".to_string());
+        let elem = ASN1Element::PrintableString("L".to_string());
         let der = elem.to_der().unwrap();
-        // tag=0x13, len=6, value="gallon"
-        assert_eq!(der, vec![0x13, 0x06, b'g', b'a', b'l', b'l', b'o', b'n']);
+        // tag=0x13, len=1, value="L"
+        assert_eq!(der, vec![0x13, 0x01, b'L']);
     }
 
     #[test]
@@ -223,11 +223,11 @@ mod tests {
 
     #[test]
     fn test_asn1_printable_string_from_der() {
-        // DER: tag=0x13, len=6, value="gallon"
-        let der = vec![0x13, 0x06, b'g', b'a', b'l', b'l', b'o', b'n'];
+        // DER: tag=0x13, len=1, value="L"
+        let der = vec![0x13, 0x01, b'L'];
         let (elem, pos) = ASN1Element::from_der(&der, 0).unwrap();
         assert_eq!(pos, der.len());
-        assert_eq!(elem, ASN1Element::PrintableString("gallon".to_string()));
+        assert_eq!(elem, ASN1Element::PrintableString("L".to_string()));
     }
 
     #[test]
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_asn1_printable_string_roundtrip() {
-        let original = "gallon".to_string();
+        let original = "L".to_string();
         let elem = ASN1Element::PrintableString(original.clone());
         let der = elem.to_der().unwrap();
         let (decoded, _) = ASN1Element::from_der(&der, 0).unwrap();
