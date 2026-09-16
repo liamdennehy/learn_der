@@ -1,8 +1,9 @@
 mod asn1;
 mod der;
-mod shopping_item;
 mod errors;
 mod helpers;
+mod shopping_item;
+mod shopping_item_r2;
 
 use shopping_item::ShoppingItem;
 
@@ -11,7 +12,6 @@ fn main() {
 
     // 1. Create the item
     let _item = ShoppingItem::new(
-        2,
         "Milk".to_string(),
         "L".to_string(),
         2,
