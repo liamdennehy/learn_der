@@ -30,6 +30,9 @@ pub enum DerError {
     #[error("Unknown Tag: found {found:#x}")]
     UnknownTag { found: u8 },
 
+    #[error("Invalid PrintableString: contains non-allowed characters")]
+    InvalidPrintableString,
+
     // #[error("Custom Error: {0}")]
     // Custom(String),
 }
@@ -44,4 +47,7 @@ pub enum ShoppingItemError {
 
     #[error("Input Error: {input_error}")]
     InputError { input_error: String },
+
+    #[error("Invalid PrintableString: {reason}")]
+    InvalidPrintableString { reason: String },
 }

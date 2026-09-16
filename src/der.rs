@@ -8,8 +8,8 @@ pub enum DERTag {
     OctetString,
     UTF8String,
     PrintableString,
+    Null,
     ErrUnknown(u8),
-    // We can add more later if needed (e.g., Boolean, Null, etc.)
 }
 
 impl DERTag {
@@ -21,6 +21,7 @@ impl DERTag {
             0x04 => Ok(DERTag::OctetString),
             0x0c => Ok(DERTag::UTF8String),
             0x13 => Ok(DERTag::PrintableString),
+            0x05 => Ok(DERTag::Null),
             _ => Err(DerError::UnknownTag { found: this_byte }),
         }
     }
@@ -33,6 +34,7 @@ impl DERTag {
             DERTag::OctetString => 0x04,
             DERTag::UTF8String => 0x0c,
             DERTag::PrintableString => 0x13,
+            DERTag::Null => 0x05,
             DERTag::ErrUnknown(unknown_byte)=> *unknown_byte
         }
     }
@@ -44,6 +46,7 @@ impl DERTag {
             DERTag::OctetString => format!("OctetString({:#02x})", self.to_byte()).to_string(),
             DERTag::UTF8String => format!("UTF8String({:#02x})", self.to_byte()).to_string(),
             DERTag::PrintableString => format!("PrintableString({:#02x})", self.to_byte()).to_string(),
+            DERTag::Null => format!("Null({:#02x})", self.to_byte()).to_string(),
             DERTag::ErrUnknown(unknown_byte)=> format!("Unknown({:#04x})", unknown_byte).to_string(),
         }
     }
@@ -213,6 +216,22 @@ mod tests {
         match DERTag::from_byte(0x02) { Ok(DERTag::Integer) => {}, _ => panic!() }
         match DERTag::from_byte(0x0c) { Ok(DERTag::UTF8String) => {}, _ => panic!() }
         match DERTag::from_byte(0x13) { Ok(DERTag::PrintableString) => {}, _ => panic!() }
+        match DERTag::from_byte(0x05) { Ok(DERTag::Null) => {}, _ => panic!() }
         assert!(DERTag::from_byte(0xff).is_err());
+    }
+
+    #[test]
+    fn test_null_encoding() {
+        // NULL = tag 0x05 + length 0x00
+        assert_eq!(DERTag::Null.to_byte(), 0x05);
+        assert_eq!(DERTag::Null.to_name(), "Null(0x5)");
+    }
+
+    #[test]
+    fn test_null_roundtrip() {
+        // from_byte → to_byte roundtrip
+        let tag = DERTag::from_byte(0x05).unwrap();
+        assert_eq!(tag, DERTag::Null);
+        assert_eq!(tag.to_byte(), 0x05);
     }
 }

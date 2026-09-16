@@ -24,10 +24,10 @@ impl ASN1Element {
         match self {
             ASN1Element::Integer(_) => DERTag::Integer,
             ASN1Element::UTF8String(_) => DERTag::UTF8String,
-            ASN1Element::PrintableString(_) => DERTag::ErrUnknown(0x13), // PrintableString
+            ASN1Element::PrintableString(_) => DERTag::PrintableString,
             ASN1Element::OctetString(_) => DERTag::OctetString,
             ASN1Element::Sequence(_) => DERTag::Sequence,
-            ASN1Element::Null => DERTag::ErrUnknown(0x05), // Null
+            ASN1Element::Null => DERTag::Null,
         }
     }
 
@@ -69,9 +69,13 @@ impl ASN1Element {
                     result
                 }
             },
-            ASN1Element::UTF8String(s) | ASN1Element::PrintableString(s) => {
+                ASN1Element::PrintableString(s) => {
+                if !is_valid_printable_string(s) {
+                    return Err(DerError::InvalidPrintableString);
+                }
                 s.as_bytes().to_vec()
             },
+            ASN1Element::UTF8String(s) => s.as_bytes().to_vec(),
             ASN1Element::OctetString(bytes) => bytes.clone(),
             ASN1Element::Sequence(elements) => {
                 let mut inner = Vec::new();
@@ -121,6 +125,18 @@ impl ASN1Element {
                 let bytes = value.ok_or(DerError::UnexpectedEndOfData { pos })?;
                 Ok((ASN1Element::OctetString(bytes), new_pos))
             },
+            DERTag::PrintableString => {
+                let bytes = value.ok_or(DerError::UnexpectedEndOfData { pos })?;
+                if !is_valid_printable_string_bytes(&bytes) {
+                    return Err(DerError::InvalidPrintableString);
+                }
+                let s = String::from_utf8(bytes)?;
+                Ok((ASN1Element::PrintableString(s), new_pos))
+            },
+            DERTag::Null => {
+                // NULL has no value payload
+                Ok((ASN1Element::Null, new_pos))
+            },
             DERTag::Sequence => {
                 let bytes = value.ok_or(DerError::UnexpectedEndOfData { pos })?;
                 eprintln!("  [asn1] parsing SEQUENCE with {} inner bytes", bytes.len());
@@ -137,5 +153,119 @@ impl ASN1Element {
             },
             _ => Err(DerError::UnknownTag { found: tag.to_byte() }),
         }
+    }
+}
+
+/// Checks that every byte in the string is in the ASN.1 PrintableString allowed set.
+///
+/// PrintableString characters (X.680):
+///   A–Z, a–z, 0–9, space, `'`, `+`, `,`, `-`, `:`, `=`, `?`
+fn is_valid_printable_string(s: &str) -> bool {
+    is_valid_printable_string_bytes(s.as_bytes())
+}
+
+fn is_valid_printable_string_bytes(bytes: &[u8]) -> bool {
+    bytes.iter().all(|&b| {
+        matches!(b,
+            b'A'..=b'Z' |
+            b'a'..=b'z' |
+            b'0'..=b'9' |
+            b' ' |
+            b'\'' |
+            b'+' |
+            b',' |
+            b'-' |
+            b':' |
+            b'=' |
+            b'?'
+        )
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_printable_string_valid_chars() {
+        // All allowed characters
+        assert!(is_valid_printable_string("Hello-World:123?"));
+        assert!(is_valid_printable_string(" gallon "));
+        assert!(is_valid_printable_string("A-Z a-z 0-9 '+,-:=?"));
+    }
+
+    #[test]
+    fn test_printable_string_invalid_chars() {
+        // Space is allowed, but other whitespace is not
+        assert!(!is_valid_printable_string("hello\tworld"));
+        assert!(!is_valid_printable_string("hello\nworld"));
+        // Accented chars, UTF-8 multibyte
+        assert!(!is_valid_printable_string("café"));
+        assert!(!is_valid_printable_string("日本語"));
+        // Slash, parens, at-sign are NOT in PrintableString
+        assert!(!is_valid_printable_string("test@example.com"));
+        assert!(!is_valid_printable_string("path/to/file"));
+    }
+
+    #[test]
+    fn test_asn1_printable_string_to_der() {
+        let elem = ASN1Element::PrintableString("gallon".to_string());
+        let der = elem.to_der().unwrap();
+        // tag=0x13, len=6, value="gallon"
+        assert_eq!(der, vec![0x13, 0x06, b'g', b'a', b'l', b'l', b'o', b'n']);
+    }
+
+    #[test]
+    fn test_asn1_printable_string_invalid_to_der() {
+        let elem = ASN1Element::PrintableString("café".to_string());
+        assert!(elem.to_der().is_err());
+    }
+
+    #[test]
+    fn test_asn1_printable_string_from_der() {
+        // DER: tag=0x13, len=6, value="gallon"
+        let der = vec![0x13, 0x06, b'g', b'a', b'l', b'l', b'o', b'n'];
+        let (elem, pos) = ASN1Element::from_der(&der, 0).unwrap();
+        assert_eq!(pos, der.len());
+        assert_eq!(elem, ASN1Element::PrintableString("gallon".to_string()));
+    }
+
+    #[test]
+    fn test_asn1_printable_string_from_der_invalid() {
+        // DER with invalid char (0x01 is not in PrintableString set)
+        let der = vec![0x13, 0x01, 0x01];
+        assert!(ASN1Element::from_der(&der, 0).is_err());
+    }
+
+    #[test]
+    fn test_asn1_printable_string_roundtrip() {
+        let original = "gallon".to_string();
+        let elem = ASN1Element::PrintableString(original.clone());
+        let der = elem.to_der().unwrap();
+        let (decoded, _) = ASN1Element::from_der(&der, 0).unwrap();
+        assert_eq!(decoded, ASN1Element::PrintableString(original));
+    }
+
+    #[test]
+    fn test_asn1_null_to_der() {
+        let elem = ASN1Element::Null;
+        // tag=0x05, len=0x00
+        assert_eq!(elem.to_der().unwrap(), vec![0x05, 0x00]);
+    }
+
+    #[test]
+    fn test_asn1_null_from_der() {
+        let der = vec![0x05, 0x00];
+        let (elem, pos) = ASN1Element::from_der(&der, 0).unwrap();
+        assert_eq!(pos, 2);
+        assert_eq!(elem, ASN1Element::Null);
+    }
+
+    #[test]
+    fn test_asn1_null_roundtrip() {
+        let elem = ASN1Element::Null;
+        let der = elem.to_der().unwrap();
+        let (decoded, _) = ASN1Element::from_der(&der, 0).unwrap();
+        assert_eq!(decoded, ASN1Element::Null);
     }
 }
