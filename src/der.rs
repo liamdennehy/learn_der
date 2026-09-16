@@ -68,16 +68,19 @@ pub enum DERValue {
 }
 
 
-/// A simple reader that holds the buffer and current position.
+/// A simple reader bound to a byte slice with a fixed upper limit.
+/// The slice's length acts as the hard boundary — the parser can never
+/// read past it, which is essential when parsing nested DER elements.
 #[derive(Debug)]
-pub struct Parser {
-    buffer: Vec<u8>,
+pub struct Parser<'a> {
+    buffer: &'a [u8],
     pos: usize,
 }
 
-impl Parser {
-    /// Creates a new Parser from a byte slice.
-    pub fn new(buffer: Vec<u8>) -> Self {
+impl<'a> Parser<'a> {
+    /// Creates a new Parser from a byte slice. The slice length is the
+    /// hard upper bound — the parser will never read beyond it.
+    pub fn new(buffer: &'a [u8]) -> Self {
         Parser { buffer, pos: 0 }
     }
 

@@ -95,7 +95,7 @@ impl ASN1Element {
     /// Decodes a DER-encoded ASN1Element from a byte buffer starting at `pos`.
     /// Returns the element and the new position after it.
     pub fn from_der(buffer: &[u8], pos: usize) -> Result<(Self, usize), DerError> {
-        let mut parser = Parser::new(buffer.to_vec());
+        let mut parser = Parser::new(buffer);
         // Skip to the right position
         for _ in 0..pos {
             parser.next()?;
