@@ -59,8 +59,10 @@ impl ShoppingItem {
         // Name as UTF8String
         children.push(ASN1Element::UTF8String(self.name.clone()));
 
-        // Unit as OCTET STRING (V1 spec)
-        children.push(ASN1Element::OctetString(self.unit.as_bytes().to_vec()));
+        // Unit as OCTET STRING (V1 spec) — padded to 16 bytes
+        let mut padded_unit = self.unit.as_bytes().to_vec();
+        padded_unit.resize(16, 0);
+        children.push(ASN1Element::OctetString(padded_unit));
 
         // Quantity as INTEGER
         children.push(ASN1Element::Integer(self.quantity as i128));
