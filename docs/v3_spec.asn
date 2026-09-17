@@ -1,0 +1,132 @@
+-- =============================================================================
+-- ShoppingItem V3 — ASN.1 Specification
+-- =============================================================================
+-- This ASN.1 module defines the structure for ShoppingItem V3, which extends
+-- V2 by adding an optional reference to a Product. A Product describes a
+-- specific item offered by a provider (retailer, producer, etc.).
+--
+-- Example use cases:
+--   "350mL Heinz Ketchup"       → has Product reference
+--   "1 loaf of brown bread"     → no Product (generic)
+--   "2 L Whole Foods Organic"   → has Product reference
+--
+-- Wire format: DER-encoded as defined in X.690.
+-- =============================================================================
+
+MODULE: learn_der_shopping_v3
+
+DEFINITIONS IMPLICIT TAGS ::==
+
+BEGIN
+
+-- =============================================================================
+-- 1. SHOPPING ITEM V3
+-- =============================================================================
+--
+-- The top-level shopping item. Version 3 is the first field (as per
+-- X.509 v3 convention). All fields after quantity are optional and
+-- identified by their ASN.1 tag when present.
+--
+-- Wire layout (DER SEQUENCE contents):
+--
+--   [0] version              INTEGER  -- fixed value 3
+--   [1] name                 UTF8String
+--   [2] unit                 PrintableString
+--   [3] quantity             INTEGER
+--   [4] description?         UTF8String      -- present iff tag = 0x0C
+--   [5] product?             [1] EXPLICIT    -- present iff tag = 0xA1
+--
+-- The parser scans fields[4..] and classifies each by tag:
+--   0x0C (UTF8String) → description
+--   0xA1 (context [1], EXPLICIT) → product
+-- Any other tag is an error.
+
+ShoppingItemV3 ::= SEQUENCE {
+    version         INTEGER,          -- must be 3
+    name            UTF8String,
+    unit            PrintableString,
+    quantity        INTEGER,          -- non-negative
+    description     UTF8String OPTIONAL,
+    product         Product OPTIONAL
+}
+
+-- =============================================================================
+-- 2. PRODUCT
+-- =============================================================================
+--
+-- Describes a specific product offered by a provider.
+--
+--   identifier   — REQUIRED. A unique identifier for the product.
+--                  Examples:
+--                    "HEINZ-KETCHUP-350ML"
+--                    "UPC:012345678905"
+--                    "GTIN:00012345678907"
+--                    "SKU-WF-ORG-MILK-2L"
+--
+--   provider     — OPTIONAL. The entity that offers/sells this product.
+--                  If present, contains a name and optionally a URL.
+--
+--   image        — OPTIONAL. A product image for display purposes.
+
+Product ::= SEQUENCE {
+    identifier    UTF8String,
+    provider      Provider OPTIONAL,
+    image         ProductImage OPTIONAL
+}
+
+-- =============================================================================
+-- 3. PROVIDER
+-- =============================================================================
+--
+-- Information about the provider (retailer, producer, brand, etc.)
+-- who offers or sells this product.
+
+Provider ::= SEQUENCE {
+    name    UTF8String,
+    url     IA5String OPTIONAL
+}
+
+-- =============================================================================
+-- 4. PRODUCT IMAGE
+-- =============================================================================
+--
+-- An image associated with the product for display/verification.
+--
+--   format — The image format (JPEG or PNG).
+--   data   — The raw image bytes.
+
+ProductImage ::= SEQUENCE {
+    format    ImageFormat,
+    data      OCTET STRING
+}
+
+-- =============================================================================
+-- 5. IMAGE FORMAT
+-- =============================================================================
+--
+-- Enumerated types for image format. Mapped to INTEGER in DER:
+--   jpeg  → 1
+--   png   → 2
+
+ImageFormat ::= ENUMERATED {
+    jpeg  (1),
+    png   (2)
+}
+
+-- =============================================================================
+-- 6. CONSTRAINTS
+-- =============================================================================
+--
+-- Name:        1 .. 255 characters (UTF-8 bytes)
+-- Description: 0 .. 65535 characters (UTF-8 bytes)
+-- Unit:        1 .. 32 characters (PrintableString subset)
+-- Quantity:    0 .. 18446744073709551615 (u64)
+-- Identifier:  1 .. 512 characters (UTF-8 bytes)
+-- ProviderName: 1 .. 255 characters (UTF-8 bytes)
+-- ProviderUrl:  0 .. 2048 characters (IA5String)
+-- Image data:  1 .. 1048576 bytes (1 MiB max)
+--
+-- These constraints are enforced at the application (Rust) level,
+-- not at the ASN.1 schema level.
+
+END -- MODULE
