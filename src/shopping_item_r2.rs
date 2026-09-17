@@ -66,15 +66,22 @@ impl ShoppingItemV2 {
             children.push(ASN1Element::UTF8String(desc.clone()));
         }
         let sequence = ASN1Element::Sequence(children);
-        sequence.to_der().expect("Failed to encode ShoppingItemV2 to DER")
+        match sequence.to_der() {
+            Ok(der) => der,
+            Err(e) => panic!("Failed to encode ShoppingItemV2 to DER: {}", e),
+        }
     }
 
     /// Parses a ShoppingItemV2 from a V2 DER byte sequence.
     pub fn from_der(data: Vec<u8>) -> Result<Self, ShoppingItemError> {
-        let (element, _pos) = ASN1Element::from_der(&data, 0)
-            .map_err(|e| ShoppingItemError::DerError {
-                der_error: format!("Failed to parse outer SEQUENCE: {}", e),
-            })?;
+        let (element, _pos) = match ASN1Element::from_der(&data, 0) {
+            Ok(result) => result,
+            Err(e) => {
+                return Err(ShoppingItemError::DerError {
+                    der_error: format!("Failed to parse outer SEQUENCE: {}", e),
+                });
+            }
+        };
 
         let children = match element {
             ASN1Element::Sequence(children) => children,

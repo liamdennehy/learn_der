@@ -11,12 +11,15 @@ fn main() {
     println!("--- 1. Generating DER ---");
 
     // 1. Create the item
-    let _item = ShoppingItem::new(
+    let _item = match ShoppingItem::new(
         "Milk".to_string(),
         "L".to_string(),
         2,
         Some("Organic".to_string()),
-    ).unwrap();
+    ) {
+        Ok(item) => item,
+        Err(e) => panic!("Failed to create ShoppingItem: {}", e),
+    };
 
     // TODO: Implement to_der() and from_der(), then uncomment serialization.
     // let der_bytes = item.to_der();

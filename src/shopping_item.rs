@@ -76,7 +76,10 @@ impl ShoppingItem {
         let sequence = ASN1Element::Sequence(children);
 
         // Encode to DER bytes
-        sequence.to_der().expect("Failed to encode ShoppingItem to DER")
+        match sequence.to_der() {
+            Ok(der) => der,
+            Err(e) => panic!("Failed to encode ShoppingItem to DER: {}", e),
+        }
     }
 
     /// Parses a ShoppingItem from a DER byte sequence.
@@ -92,10 +95,14 @@ impl ShoppingItem {
     /// ```
     pub fn from_der(data: Vec<u8>) -> Result<Self, ShoppingItemError> {
         // Parse the outer SEQUENCE
-        let (element, _pos) = ASN1Element::from_der(&data, 0)
-            .map_err(|e| ShoppingItemError::DerError {
-                der_error: format!("Failed to parse outer SEQUENCE: {}", e),
-            })?;
+        let (element, _pos) = match ASN1Element::from_der(&data, 0) {
+            Ok(result) => result,
+            Err(e) => {
+                return Err(ShoppingItemError::DerError {
+                    der_error: format!("Failed to parse outer SEQUENCE: {}", e),
+                });
+            }
+        };
 
         let children = match element {
             ASN1Element::Sequence(children) => children,
@@ -136,9 +143,16 @@ impl ShoppingItem {
 
         // 2. Unit — OCTET STRING (V1 spec)
         let unit = match &children[1] {
-            ASN1Element::OctetString(bytes) => String::from_utf8(bytes.clone()).map_err(|_| ShoppingItemError::DerError {
-                der_error: "Unit contains invalid UTF-8".to_string(),
-            })?,
+            ASN1Element::OctetString(bytes) => {
+                match String::from_utf8(bytes.clone()) {
+                    Ok(s) => s,
+                    Err(_) => {
+                        return Err(ShoppingItemError::DerError {
+                            der_error: "Unit contains invalid UTF-8".to_string(),
+                        });
+                    }
+                }
+            }
             other => {
                 return Err(ShoppingItemError::DerError {
                     der_error: format!(

@@ -86,7 +86,10 @@ impl<'a> Parser<'a> {
 
     /// Peeks at the byte at the current position without advancing.
     pub fn peek(&self) -> Option<u8> {
-        self.buffer.get(self.pos).copied()
+        match self.buffer.get(self.pos) {
+            Some(&byte) => Some(byte),
+            None => None,
+        }
     }
 
     /// Consumes the current byte.

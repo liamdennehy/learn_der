@@ -108,7 +108,10 @@ impl ASN1Element {
 
         match tag {
             DERTag::Integer => {
-                let bytes = value.ok_or(DerError::UnexpectedEndOfData { pos })?;
+                let bytes = match value {
+                    Some(b) => b,
+                    None => return Err(DerError::UnexpectedEndOfData { pos }),
+                };
                 // Parse minimal two's complement integer
                 let mut result: i128 = 0;
                 for b in &bytes {
@@ -117,16 +120,25 @@ impl ASN1Element {
                 Ok((ASN1Element::Integer(result), new_pos))
             },
             DERTag::UTF8String => {
-                let bytes = value.ok_or(DerError::UnexpectedEndOfData { pos })?;
+                let bytes = match value {
+                    Some(b) => b,
+                    None => return Err(DerError::UnexpectedEndOfData { pos }),
+                };
                 let s = String::from_utf8(bytes)?;
                 Ok((ASN1Element::UTF8String(s), new_pos))
             },
             DERTag::OctetString => {
-                let bytes = value.ok_or(DerError::UnexpectedEndOfData { pos })?;
+                let bytes = match value {
+                    Some(b) => b,
+                    None => return Err(DerError::UnexpectedEndOfData { pos }),
+                };
                 Ok((ASN1Element::OctetString(bytes), new_pos))
             },
             DERTag::PrintableString => {
-                let bytes = value.ok_or(DerError::UnexpectedEndOfData { pos })?;
+                let bytes = match value {
+                    Some(b) => b,
+                    None => return Err(DerError::UnexpectedEndOfData { pos }),
+                };
                 if !is_valid_printable_string_bytes(&bytes) {
                     return Err(DerError::InvalidPrintableString);
                 }
@@ -138,7 +150,10 @@ impl ASN1Element {
                 Ok((ASN1Element::Null, new_pos))
             },
             DERTag::Sequence => {
-                let bytes = value.ok_or(DerError::UnexpectedEndOfData { pos })?;
+                let bytes = match value {
+                    Some(b) => b,
+                    None => return Err(DerError::UnexpectedEndOfData { pos }),
+                };
                 eprintln!("  [asn1] parsing SEQUENCE with {} inner bytes", bytes.len());
                 let mut elements = Vec::new();
                 let mut cursor = 0;
@@ -165,9 +180,8 @@ fn is_valid_printable_string(s: &str) -> bool {
 }
 
 fn is_valid_printable_string_bytes(bytes: &[u8]) -> bool {
-    bytes.iter().all(|&b| {
-        matches!(b,
-            b'A'..=b'Z' |
+    for &b in bytes {
+        if !(matches!(b, b'A'..=b'Z' |
             b'a'..=b'z' |
             b'0'..=b'9' |
             b' ' |
@@ -177,9 +191,11 @@ fn is_valid_printable_string_bytes(bytes: &[u8]) -> bool {
             b'-' |
             b':' |
             b'=' |
-            b'?'
-        )
-    })
+            b'?')) {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(test)]
