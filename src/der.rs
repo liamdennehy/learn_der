@@ -195,11 +195,12 @@ pub fn encode_length(len: usize) -> Vec<u8> {
         vec![len as u8]
     } else {
         let len_bytes = len.to_be_bytes();
+        let total_bytes = len_bytes.len();
         let mut start = 0;
-        while start < 4 && len_bytes[start] == 0 {
+        while start < total_bytes && len_bytes[start] == 0 {
             start += 1;
         }
-        let num_bytes = 4 - start;
+        let num_bytes = total_bytes - start;
         let mut result = vec![0x80 | num_bytes as u8];
         result.extend_from_slice(&len_bytes[start..]);
         result
