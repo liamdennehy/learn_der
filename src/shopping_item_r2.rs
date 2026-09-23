@@ -56,7 +56,7 @@ impl ShoppingItemV2 {
     }
 
     /// Serializes the ShoppingItemV2 into a V2 DER byte sequence.
-    pub fn to_der(&self) -> Vec<u8> {
+    pub fn to_der(&self) -> Result<Vec<u8>, ShoppingItemError> {
         let mut children: Vec<ASN1Element> = Vec::new();
         children.push(ASN1Element::Integer(self.version as i128));
         children.push(ASN1Element::UTF8String(self.name.clone()));
@@ -66,10 +66,9 @@ impl ShoppingItemV2 {
             children.push(ASN1Element::UTF8String(desc.clone()));
         }
         let sequence = ASN1Element::Sequence(children);
-        match sequence.to_der() {
-            Ok(der) => der,
-            Err(e) => panic!("Failed to encode ShoppingItemV2 to DER: {}", e),
-        }
+        sequence.to_der().map_err(|e| ShoppingItemError::DerError {
+            der_error: format!("Failed to encode ShoppingItemV2 to DER: {}", e),
+        })
     }
 
     /// Parses a ShoppingItemV2 from a V2 DER byte sequence.
@@ -250,7 +249,7 @@ mod tests {
     #[test]
     fn test_round_trip_with_description() {
         let item = ShoppingItemV2::new(2, "Milk".into(), "L".into(), 2, Some("Organic".into())).unwrap();
-        let der = item.to_der();
+        let der = item.to_der().unwrap();
         assert_eq!(&der, DER_WITH_DESCRIPTION);
         let decoded = ShoppingItemV2::from_der(der).unwrap();
         assert_eq!(item, decoded);
@@ -259,7 +258,7 @@ mod tests {
     #[test]
     fn test_round_trip_without_description() {
         let item = ShoppingItemV2::new(2, "Bread".into(), "loaf".into(), 1, None).unwrap();
-        let der = item.to_der();
+        let der = item.to_der().unwrap();
         assert_eq!(&der, DER_WITHOUT_DESCRIPTION);
         let decoded = ShoppingItemV2::from_der(der).unwrap();
         assert_eq!(item, decoded);
@@ -268,7 +267,7 @@ mod tests {
     #[test]
     fn test_version_field_encoding() {
         let item = ShoppingItemV2::new(2, "Apples".into(), "item".into(), 5, None).unwrap();
-        let der = item.to_der();
+        let der = item.to_der().unwrap();
         assert_eq!(der[0], 0x30);
         assert_eq!(der[2], 0x02);
         assert_eq!(der[3], 0x01);
@@ -297,7 +296,7 @@ mod tests {
     #[test]
     fn test_unit_is_printable_string_not_octet_string() {
         let item = ShoppingItemV2::new(2, "Milk".into(), "L".into(), 1, None).unwrap();
-        let der = item.to_der();
+        let der = item.to_der().unwrap();
         let unit_offset = 1 + 1 + 3 + 6;
         assert_eq!(der[unit_offset], 0x13);
     }
@@ -331,7 +330,7 @@ mod tests {
             "Eggs".into(), "dozen".into(), 2, Some("Free-range".into()),
         ).unwrap();
         let v2 = ShoppingItemV2::from_v1(&v1);
-        let der = v2.to_der();
+        let der = v2.to_der().unwrap();
         let v2_roundtrip = ShoppingItemV2::from_der(der).unwrap();
         assert_eq!(v2, v2_roundtrip);
     }

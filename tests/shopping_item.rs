@@ -25,7 +25,7 @@ fn test_v3_heinz_ketchup() {
         Some(product),
     ).unwrap();
 
-    let der = item.to_der();
+    let der = item.to_der().unwrap();
     let parsed = ShoppingItemV3::from_der(der).unwrap();
     assert_eq!(item, parsed);
 
@@ -47,7 +47,7 @@ fn test_v3_generic_bread() {
         None,
     ).unwrap();
 
-    let der = item.to_der();
+    let der = item.to_der().unwrap();
     let parsed = ShoppingItemV3::from_der(der).unwrap();
     assert_eq!(item, parsed);
 
@@ -95,7 +95,7 @@ fn test_v3_wire_format_stability() {
     assert!(parsed.product.is_some());
 
     // Encode back — must produce the exact same bytes (wire format stability)
-    let re_der = parsed.to_der();
+    let re_der = parsed.to_der().unwrap();
     assert_eq!(DER_FIXTURE, re_der.as_slice());
 }
 
@@ -109,7 +109,7 @@ fn test_v3_roundtrip_v2_to_v3_no_product() {
     assert_eq!(v3.name, "Honey");
     assert_eq!(v3.product, None);
 
-    let der = v3.to_der();
+    let der = v3.to_der().unwrap();
     let parsed = ShoppingItemV3::from_der(der).unwrap();
     assert_eq!(v3, parsed);
     assert!(parsed.product.is_none());

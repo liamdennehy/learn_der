@@ -65,7 +65,13 @@ fn main() {
         Some(product),
     ).unwrap();
 
-    let der_v3 = item.to_der();
+    let der_v3 = match item.to_der() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Failed to encode V3 item to DER: {}", e);
+            return;
+        }
+    };
     println!("V3 DER encoded: {} bytes", der_v3.len());
 
     let parsed_v3 = ShoppingItemV3::from_der(der_v3).unwrap();
@@ -87,7 +93,13 @@ fn main() {
         None,
     ).unwrap();
 
-    let der_generic = generic_item.to_der();
+    let der_generic = match generic_item.to_der() {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Failed to encode generic item to DER: {}", e);
+            return;
+        }
+    };
     println!("\nGeneric item DER encoded: {} bytes", der_generic.len());
 
     let parsed_generic = ShoppingItemV3::from_der(der_generic).unwrap();

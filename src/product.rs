@@ -98,7 +98,7 @@ impl Product {
     ///   image_type    PrintableString? (present only if Some)
     /// }
     /// ```
-    pub fn to_der(&self) -> Vec<u8> {
+    pub fn to_der(&self) -> Result<Vec<u8>, ShoppingItemError> {
         let mut children: Vec<ASN1Element> = Vec::new();
 
         // product_id always present
@@ -131,10 +131,9 @@ impl Product {
         }
 
         let sequence = ASN1Element::Sequence(children);
-        match sequence.to_der() {
-            Ok(der) => der,
-            Err(e) => panic!("Failed to encode Product to DER: {}", e),
-        }
+        sequence.to_der().map_err(|e| ShoppingItemError::DerError {
+            der_error: format!("Failed to encode Product to DER: {}", e),
+        })
     }
 
     /// Parses a Product from a DER byte sequence.
@@ -250,7 +249,7 @@ mod tests {
         )
         .unwrap();
 
-        let der = original.to_der();
+        let der = original.to_der().unwrap();
         let decoded = Product::from_der(der).unwrap();
         assert_eq!(original, decoded);
     }
@@ -258,7 +257,7 @@ mod tests {
     #[test]
     fn test_product_roundtrip_minimal() {
         let original = Product::new("test-id".to_string(), None, None, None, None).unwrap();
-        let der = original.to_der();
+        let der = original.to_der().unwrap();
         let decoded = Product::from_der(der).unwrap();
         assert_eq!(original, decoded);
     }
@@ -274,7 +273,7 @@ mod tests {
         )
         .unwrap();
 
-        let der = original.to_der();
+        let der = original.to_der().unwrap();
         let decoded = Product::from_der(der).unwrap();
         assert_eq!(original, decoded);
     }
@@ -290,7 +289,7 @@ mod tests {
         )
         .unwrap();
 
-        let der = original.to_der();
+        let der = original.to_der().unwrap();
         let decoded = Product::from_der(der).unwrap();
         assert_eq!(original, decoded);
     }
@@ -306,7 +305,7 @@ mod tests {
         )
         .unwrap();
 
-        let der = original.to_der();
+        let der = original.to_der().unwrap();
         let decoded = Product::from_der(der).unwrap();
         assert_eq!(original, decoded);
     }
@@ -322,7 +321,7 @@ mod tests {
         )
         .unwrap();
 
-        let der = original.to_der();
+        let der = original.to_der().unwrap();
         let decoded = Product::from_der(der).unwrap();
         assert_eq!(original, decoded);
     }
@@ -405,7 +404,7 @@ mod tests {
     #[test]
     fn test_product_to_der_structure() {
         let product = Product::new("test-id".to_string(), None, None, None, None).unwrap();
-        let der = product.to_der();
+        let der = product.to_der().unwrap();
 
         // Should start with 0x30 (SEQUENCE tag)
         assert_eq!(der[0], 0x30);

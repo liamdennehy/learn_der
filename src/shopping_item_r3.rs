@@ -61,7 +61,7 @@ impl ShoppingItemV3 {
         })
     }
 
-    pub fn to_der(&self) -> Vec<u8> {
+    pub fn to_der(&self) -> Result<Vec<u8>, ShoppingItemError> {
         let mut children: Vec<ASN1Element> = Vec::new();
         children.push(ASN1Element::Integer(self.version as i128));
         children.push(ASN1Element::UTF8String(self.name.clone()));
@@ -71,16 +71,17 @@ impl ShoppingItemV3 {
             children.push(ASN1Element::UTF8String(desc.clone()));
         }
         if let Some(ref p) = self.product {
-            let product_der = p.to_der();
+            let product_der = p.to_der()?;
             let (product_element, _pos) = ASN1Element::from_der(&product_der, 0)
-                .expect("Failed to parse product DER back into ASN1Element");
+                .map_err(|e| ShoppingItemError::DerError {
+                    der_error: format!("Failed to parse product DER back into ASN1Element: {}", e),
+                })?;
             children.push(product_element);
         }
         let sequence = ASN1Element::Sequence(children);
-        match sequence.to_der() {
-            Ok(der) => der,
-            Err(e) => panic!("Failed to encode ShoppingItemV3 to DER: {}", e),
-        }
+        sequence.to_der().map_err(|e| ShoppingItemError::DerError {
+            der_error: format!("Failed to encode ShoppingItemV3 to DER: {}", e),
+        })
     }
 
     pub fn from_der(data: Vec<u8>) -> Result<Self, ShoppingItemError> {
@@ -191,7 +192,10 @@ impl ShoppingItemV3 {
             if children.len() > product_idx {
                 match &children[product_idx] {
                     ASN1Element::Sequence(inner) => {
-                        let product_der = ASN1Element::Sequence(inner.clone()).to_der().unwrap();
+                        let product_der = ASN1Element::Sequence(inner.clone()).to_der()
+                            .map_err(|e| ShoppingItemError::DerError {
+                                der_error: format!("Failed to encode nested product SEQUENCE: {}", e),
+                            })?;
                         Some(Product::from_der(product_der)?)
                     }
                     other => {
@@ -235,7 +239,7 @@ mod tests {
             Some("JPEG".to_string()),
         ).unwrap();
         let original = ShoppingItemV3::new(3, "Widget".into(), "each".into(), 5, Some("A nice widget".into()), Some(product)).unwrap();
-        let der = original.to_der();
+        let der = original.to_der().unwrap();
         let decoded = ShoppingItemV3::from_der(der).unwrap();
         assert_eq!(original, decoded);
     }
@@ -243,7 +247,7 @@ mod tests {
     #[test]
     fn test_v3_roundtrip_without_product() {
         let original = ShoppingItemV3::new(3, "Milk".into(), "L".into(), 2, Some("Organic".into()), None).unwrap();
-        let der = original.to_der();
+        let der = original.to_der().unwrap();
         let decoded = ShoppingItemV3::from_der(der).unwrap();
         assert_eq!(original, decoded);
     }
@@ -252,7 +256,7 @@ mod tests {
     fn test_v3_roundtrip_with_minimal_product() {
         let product = Product::new("PROD-001".into(), None, None, None, None).unwrap();
         let original = ShoppingItemV3::new(3, "Widget".into(), "each".into(), 1, None, Some(product)).unwrap();
-        let der = original.to_der();
+        let der = original.to_der().unwrap();
         let decoded = ShoppingItemV3::from_der(der).unwrap();
         assert_eq!(original, decoded);
     }
@@ -267,7 +271,7 @@ mod tests {
             Some("JPEG".to_string()),
         ).unwrap();
         let original = ShoppingItemV3::new(3, "Widget".into(), "each".into(), 5, Some("A nice widget".into()), Some(product)).unwrap();
-        let der = original.to_der();
+        let der = original.to_der().unwrap();
         let decoded = ShoppingItemV3::from_der(der).unwrap();
         assert_eq!(original, decoded);
     }
@@ -282,7 +286,7 @@ mod tests {
             Some("PNG".into()),
         ).unwrap();
         let original = ShoppingItemV3::new(3, "Image Item".into(), "piece".into(), 1, Some("Has PNG image".into()), Some(product)).unwrap();
-        let der = original.to_der();
+        let der = original.to_der().unwrap();
         let decoded = ShoppingItemV3::from_der(der).unwrap();
         assert_eq!(original, decoded);
     }
@@ -290,7 +294,7 @@ mod tests {
     #[test]
     fn test_v3_version_field_encoding() {
         let item = ShoppingItemV3::new(3, "Apples".into(), "item".into(), 5, None, None).unwrap();
-        let der = item.to_der();
+        let der = item.to_der().unwrap();
         assert_eq!(der[0], 0x30);
         assert_eq!(der[2], 0x02);
         assert_eq!(der[4], 0x03);
@@ -333,7 +337,7 @@ mod tests {
     fn test_v3_product_is_nested_sequence() {
         let product = Product::new("PROD-NEST".into(), None, None, None, None).unwrap();
         let item = ShoppingItemV3::new(3, "Item".into(), "each".into(), 1, None, Some(product)).unwrap();
-        let der = item.to_der();
+        let der = item.to_der().unwrap();
         let (element, _pos) = ASN1Element::from_der(&der, 0).unwrap();
         if let ASN1Element::Sequence(children) = element {
             assert_eq!(children.len(), 5);
@@ -368,7 +372,7 @@ mod tests {
     fn test_v3_from_v2_to_der_roundtrip() {
         let v2 = crate::shopping_item_r2::ShoppingItemV2::new(2, "Eggs".into(), "dozen".into(), 2, Some("Free-range".into())).unwrap();
         let v3 = ShoppingItemV3::from_v2(&v2);
-        let der = v3.to_der();
+        let der = v3.to_der().unwrap();
         let v3_decoded = ShoppingItemV3::from_der(der).unwrap();
         assert_eq!(v3, v3_decoded);
     }
