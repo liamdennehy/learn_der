@@ -1,4 +1,3 @@
-// use crate::der::Tag::Sequence;
 use crate::errors::DerError;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,22 +50,6 @@ impl DERTag {
         }
     }
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum DERValue {
-    Integer(i128),
-    OctetString(String),
-    BitString(Vec<u8>),
-    Boolean(bool),
-    UTF8String(String),
-    PrintableString(String),
-    IA5String(String),
-    UTCTime,
-    GeneralizedTime,
-    ObjectIdentifier,
-    Null,
-}
-
 
 /// Maximum allowed DER element payload size to guard against memory exhaustion.
 /// 64 MiB is a reasonable cap for embedded/educational use cases.
@@ -146,6 +129,7 @@ impl<'a> Parser<'a> {
         
     /// Reads the Length field according to DER rules.
     /// Enforces MAX_PARSE_SIZE to prevent memory exhaustion from crafted blobs.
+    /// Rejects non-minimal length encoding (DER requires the shortest possible form).
     pub fn read_length(&mut self) -> Result<usize,DerError> {
         let length: usize = match self.next() {
             Err(e) => return Err(e),
@@ -154,12 +138,50 @@ impl<'a> Parser<'a> {
                     usize::from(first_byte)
                 } else {
                     let num_len_bytes: u8 = first_byte & 0x7F;
+                    // DER requires minimal length encoding: the number of length
+                    // bytes itself must be as small as possible.  Reject if the
+                    // first length byte is zero (non-minimal) or if a single
+                    // byte would have sufficed (e.g. 0x81 0x00 for length 0).
+                    if num_len_bytes == 0 {
+                        return Err(DerError::NonMinimalEncoding {
+                            field: "length",
+                        });
+                    }
+                    if num_len_bytes > 4 {
+                        return Err(DerError::NonMinimalEncoding {
+                            field: "length",
+                        });
+                    }
+                    // Check for non-minimal: a value that fits in fewer bytes
+                    // but was encoded with extra leading zeros.
                     let mut calc_length: usize = 0;
-                    for _ in 0..num_len_bytes {
+                    for _i in 0..num_len_bytes {
                         match self.next() {
                             Err(e) => return Err(e),
-                            Ok(this_byte) => calc_length = (calc_length << 8) | usize::from(this_byte)
+                            Ok(this_byte) => {
+                                calc_length = (calc_length << 8) | usize::from(this_byte);
+                            }
                         }
+                    }
+                    // DER requires the shortest possible length encoding.
+                    // If the value fits in one byte (< 128), long-form is
+                    // always non-minimal regardless of num_len_bytes.
+                    if calc_length < 128 {
+                        return Err(DerError::NonMinimalEncoding {
+                            field: "length",
+                        });
+                    }
+                    // Reject leading-zero bloat: e.g. 0x82 0x00 0x01 for 256
+                    // should be 0x81 0x01.
+                    if calc_length < 256 && num_len_bytes > 2 {
+                        return Err(DerError::NonMinimalEncoding {
+                            field: "length",
+                        });
+                    }
+                    if calc_length < 65536 && num_len_bytes > 3 {
+                        return Err(DerError::NonMinimalEncoding {
+                            field: "length",
+                        });
                     }
                     calc_length
                 }
@@ -205,11 +227,6 @@ impl<'a> Parser<'a> {
     pub fn allocated(&self) -> usize {
         self.allocated
     }  
-
-    // /// Returns the remaining bytes (useful for debugging or nested structures)
-    // pub fn remaining(&self) -> &[u8] {
-    //     &self.buffer[self.pos..]
-    // }
 }
 
 
@@ -229,12 +246,6 @@ pub fn encode_length(len: usize) -> Vec<u8> {
         result.extend_from_slice(&len_bytes[start..]);
         result
     }
-}
-
-pub struct Encoder {
-    pub tag: DERTag,
-    pub lenth: u128,
-    pub value: DERValue
 }
 
 #[cfg(test)]
@@ -264,5 +275,35 @@ mod tests {
         let tag = DERTag::from_byte(0x05).unwrap();
         assert_eq!(tag, DERTag::Null);
         assert_eq!(tag.to_byte(), 0x05);
+    }
+
+    // --- Non-minimal DER rejection tests ---
+
+    #[test]
+    fn test_nonminimal_length_encoding_rejected() {
+        // Length 5 encoded as 0x81 0x05 (2 bytes instead of 0x05)
+        let mut parser = Parser::new(&[0x81, 0x05]);
+        assert!(parser.read_length().is_err());
+    }
+
+    #[test]
+    fn test_nonminimal_length_leading_zeros_rejected() {
+        // Length 256 encoded as 0x82 0x00 0x01 (3 bytes instead of 2)
+        let mut parser = Parser::new(&[0x82, 0x00, 0x01]);
+        assert!(parser.read_length().is_err());
+    }
+
+    #[test]
+    fn test_valid_length_256_accepts_2_byte_encoding() {
+        // Length 256 encoded as 0x82 0x01 0x00 — this is minimal
+        let mut parser = Parser::new(&[0x82, 0x01, 0x00]);
+        assert_eq!(parser.read_length().unwrap(), 256);
+    }
+
+    #[test]
+    fn test_valid_short_length_accepted() {
+        // Length 127 encoded as 0x7f — minimal
+        let mut parser = Parser::new(&[0x7f]);
+        assert_eq!(parser.read_length().unwrap(), 127);
     }
 }

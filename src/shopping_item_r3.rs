@@ -71,12 +71,11 @@ impl ShoppingItemV3 {
             children.push(ASN1Element::UTF8String(desc.clone()));
         }
         if let Some(ref p) = self.product {
-            let product_der = p.to_der()?;
-            let (product_element, _pos) = ASN1Element::from_der(&product_der, 0)
-                .map_err(|e| ShoppingItemError::DerError {
-                    der_error: format!("Failed to parse product DER back into ASN1Element: {}", e),
-                })?;
-            children.push(product_element);
+            // Build the Product's ASN1Element children directly to avoid
+            // the unnecessary round-trip of encoding to DER bytes and
+            // parsing back into ASN1Element.
+            let product_children = build_product_children(p)?;
+            children.push(ASN1Element::Sequence(product_children));
         }
         let sequence = ASN1Element::Sequence(children);
         sequence.to_der().map_err(|e| ShoppingItemError::DerError {
@@ -235,6 +234,36 @@ impl ShoppingItemV3 {
             product: None,
         }
     }
+}
+
+/// Build the ASN1Element children for a Product, matching the same layout
+/// as `Product::to_der()` but returning a Vec<ASN1Element> instead of DER bytes.
+fn build_product_children(
+    product: &Product,
+) -> Result<Vec<ASN1Element>, ShoppingItemError> {
+    let mut children: Vec<ASN1Element> = Vec::new();
+    children.push(ASN1Element::UTF8String(product.product_id.clone()));
+    if let Some(ref p) = product.provider {
+        children.push(ASN1Element::UTF8String(p.clone()));
+    } else {
+        children.push(ASN1Element::Null);
+    }
+    if let Some(ref url) = product.product_url {
+        children.push(ASN1Element::UTF8String(url.clone()));
+    } else {
+        children.push(ASN1Element::Null);
+    }
+    if let Some(ref img) = product.image_data {
+        children.push(ASN1Element::OctetString(img.clone()));
+    } else {
+        children.push(ASN1Element::Null);
+    }
+    if let Some(ref it) = product.image_type {
+        children.push(ASN1Element::PrintableString(it.clone()));
+    } else {
+        children.push(ASN1Element::Null);
+    }
+    Ok(children)
 }
 
 #[cfg(test)]

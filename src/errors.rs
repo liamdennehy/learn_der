@@ -1,5 +1,3 @@
-// src/errors.rs
-// use crate::der::Tag;
 use thiserror::Error;
 use std::num::TryFromIntError;
 
@@ -8,9 +6,6 @@ use std::num::TryFromIntError;
 pub enum DerError {
     #[error("Unexpected end of data at position {pos}")]
     UnexpectedEndOfData { pos: usize },
-
-    // #[error("Invalid Tag: expected {expected:#x}, found {found:#x}")]
-    // InvalidTag { expected: u8, found: u8 },
 
     #[error("Invalid Length: expected {expected}, found {found}")]
     InvalidLength { expected: usize, found: usize },
@@ -39,15 +34,12 @@ pub enum DerError {
     #[error("Parse size exceeded maximum allowed size of {max} bytes (found {size} bytes)")]
     MaxSizeExceeded { max: usize, size: usize },
 
+    #[error("Non-minimal DER encoding in {field}")]
+    NonMinimalEncoding { field: &'static str },
+
     #[error("Unexpected tag in optional field: expected {expected}, found {found}")]
     UnexpectedTag { expected: String, found: String },
-
-    // #[error("Custom Error: {0}")]
-    // Custom(String),
 }
-
-/// A convenient type alias for Results
-// pub type Result<T> = std::result::Result<T, DerError>;
 
 #[derive(Debug, Error)]
 pub enum ShoppingItemError {
