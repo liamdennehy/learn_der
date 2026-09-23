@@ -68,6 +68,10 @@ pub enum DERValue {
 }
 
 
+/// Maximum allowed DER element payload size to guard against memory exhaustion.
+/// 64 MiB is a reasonable cap for embedded/educational use cases.
+pub const MAX_PARSE_SIZE: usize = 64 * 1024 * 1024;
+
 /// A simple reader bound to a byte slice with a fixed upper limit.
 /// The slice's length acts as the hard boundary — the parser can never
 /// read past it, which is essential when parsing nested DER elements.
@@ -75,13 +79,15 @@ pub enum DERValue {
 pub struct Parser<'a> {
     buffer: &'a [u8],
     pos: usize,
+    /// Running total of bytes allocated by read_value so far.
+    allocated: usize,
 }
 
 impl<'a> Parser<'a> {
     /// Creates a new Parser from a byte slice. The slice length is the
     /// hard upper bound — the parser will never read beyond it.
     pub fn new(buffer: &'a [u8]) -> Self {
-        Parser { buffer, pos: 0 }
+        Parser { buffer, pos: 0, allocated: 0 }
     }
 
     /// Peeks at the byte at the current position without advancing.
@@ -139,6 +145,7 @@ impl<'a> Parser<'a> {
     }
         
     /// Reads the Length field according to DER rules.
+    /// Enforces MAX_PARSE_SIZE to prevent memory exhaustion from crafted blobs.
     pub fn read_length(&mut self) -> Result<usize,DerError> {
         let length: usize = match self.next() {
             Err(e) => return Err(e),
@@ -158,12 +165,24 @@ impl<'a> Parser<'a> {
                 }
             } 
         };
-        return Ok(length);
+        if length > MAX_PARSE_SIZE {
+            return Err(DerError::MaxSizeExceeded { max: MAX_PARSE_SIZE, size: length });
+        }
+        Ok(length)
     }
 
     /// Reads exactly `len` bytes as the Value.
+    /// Enforces MAX_PARSE_SIZE cumulatively to prevent memory exhaustion from
+    /// deeply nested structures.
     pub fn read_value(&mut self, len: usize) -> Result<Option<Vec<u8>>,DerError> {
         if len > 0 {
+            self.allocated = self
+                .allocated
+                .checked_add(len)
+                .ok_or(DerError::MaxSizeExceeded { max: MAX_PARSE_SIZE, size: usize::MAX })?;
+            if self.allocated > MAX_PARSE_SIZE {
+                return Err(DerError::MaxSizeExceeded { max: MAX_PARSE_SIZE, size: self.allocated });
+            }
             let mut value = Vec::with_capacity(len);
             for _ in 0..len {
                 value.push(match self.next() {
@@ -180,6 +199,11 @@ impl<'a> Parser<'a> {
 
     pub fn read_pos(&self) -> usize {
         self.pos
+    }
+
+    /// Returns the total number of bytes allocated so far across all read_value calls.
+    pub fn allocated(&self) -> usize {
+        self.allocated
     }  
 
     // /// Returns the remaining bytes (useful for debugging or nested structures)

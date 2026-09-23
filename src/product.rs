@@ -188,41 +188,73 @@ impl Product {
             }
         };
 
-        // 2. provider — at index 1 if present (and is UTF8String)
+        // 2. provider — at index 1 if present (UTF8String; Null = absent)
         let provider = if children.len() > 1 {
             match &children[1] {
                 ASN1Element::UTF8String(s) => Some(s.clone()),
-                _ => None,
+                ASN1Element::Null => None,
+                other => {
+                    return Err(ShoppingItemError::DerError {
+                        der_error: format!(
+                            "Expected UTF8String or Null for provider, found {}",
+                            other.tag().to_name()
+                        ),
+                    });
+                }
             }
         } else {
             None
         };
 
-        // 3. product_url — at index 2 if present
+        // 3. product_url — at index 2 if present (UTF8String; Null = absent)
         let product_url = if children.len() > 2 {
             match &children[2] {
                 ASN1Element::UTF8String(s) => Some(s.clone()),
-                _ => None,
+                ASN1Element::Null => None,
+                other => {
+                    return Err(ShoppingItemError::DerError {
+                        der_error: format!(
+                            "Expected UTF8String or Null for product_url, found {}",
+                            other.tag().to_name()
+                        ),
+                    });
+                }
             }
         } else {
             None
         };
 
-        // 4. image_data — at index 3 if present
+        // 4. image_data — at index 3 if present (OctetString; Null = absent)
         let image_data = if children.len() > 3 {
             match &children[3] {
                 ASN1Element::OctetString(bytes) => Some(bytes.clone()),
-                _ => None,
+                ASN1Element::Null => None,
+                other => {
+                    return Err(ShoppingItemError::DerError {
+                        der_error: format!(
+                            "Expected OctetString or Null for image_data, found {}",
+                            other.tag().to_name()
+                        ),
+                    });
+                }
             }
         } else {
             None
         };
 
-        // 5. image_type — at index 4 if present
+        // 5. image_type — at index 4 if present (PrintableString; Null = absent)
         let image_type = if children.len() > 4 {
             match &children[4] {
                 ASN1Element::PrintableString(s) => Some(s.clone()),
-                _ => None,
+                ASN1Element::Null => None,
+                other => {
+                    return Err(ShoppingItemError::DerError {
+                        der_error: format!(
+                            "Expected PrintableString or Null for image_type, found {}",
+                            other.tag().to_name()
+                        ),
+                    });
+                }
             }
         } else {
             None

@@ -33,6 +33,15 @@ pub enum DerError {
     #[error("Invalid PrintableString: contains non-allowed characters")]
     InvalidPrintableString,
 
+    #[error("Parse depth exceeded maximum allowed depth of {max} (found {depth})")]
+    MaxDepthExceeded { max: usize, depth: usize },
+
+    #[error("Parse size exceeded maximum allowed size of {max} bytes (found {size} bytes)")]
+    MaxSizeExceeded { max: usize, size: usize },
+
+    #[error("Unexpected tag in optional field: expected {expected}, found {found}")]
+    UnexpectedTag { expected: String, found: String },
+
     // #[error("Custom Error: {0}")]
     // Custom(String),
 }

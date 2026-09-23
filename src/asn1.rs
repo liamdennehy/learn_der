@@ -7,6 +7,9 @@
 use crate::der::{DERTag, Parser, encode_length};
 use crate::errors::DerError;
 
+/// Maximum recursion depth for nested SEQUENCE parsing.
+const MAX_PARSE_DEPTH: usize = 32;
+
 /// High-level ASN.1 data types that carry semantic meaning.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ASN1Element {
@@ -95,6 +98,13 @@ impl ASN1Element {
     /// Decodes a DER-encoded ASN1Element from a byte buffer starting at `pos`.
     /// Returns the element and the new position after it.
     pub fn from_der(buffer: &[u8], pos: usize) -> Result<(Self, usize), DerError> {
+        Self::from_der_with_depth(buffer, pos, 0)
+    }
+
+    fn from_der_with_depth(buffer: &[u8], pos: usize, depth: usize) -> Result<(Self, usize), DerError> {
+        if depth > MAX_PARSE_DEPTH {
+            return Err(DerError::MaxDepthExceeded { max: MAX_PARSE_DEPTH, depth });
+        }
         let mut parser = Parser::new(buffer);
         // Skip to the right position
         for _ in 0..pos {
@@ -154,13 +164,10 @@ impl ASN1Element {
                     Some(b) => b,
                     None => return Err(DerError::UnexpectedEndOfData { pos }),
                 };
-                eprintln!("  [asn1] parsing SEQUENCE with {} inner bytes", bytes.len());
                 let mut elements = Vec::new();
                 let mut cursor = 0;
                 while cursor < bytes.len() {
-                    eprintln!("  [asn1]   cursor={}, next_byte={:#04x}", cursor, bytes[cursor]);
-                    let (elem, next) = ASN1Element::from_der(&bytes, cursor)?;
-                    eprintln!("  [asn1]   parsed {:?}, next={}", elem, next);
+                    let (elem, next) = Self::from_der_with_depth(&bytes, cursor, depth + 1)?;
                     elements.push(elem);
                     cursor = next;
                 }

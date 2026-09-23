@@ -172,16 +172,29 @@ impl ShoppingItemV3 {
         let description = if children.len() > 5 {
             match &children[4] {
                 ASN1Element::UTF8String(s) => Some(s.clone()),
+                ASN1Element::Null => None,
                 other => {
                     return Err(ShoppingItemError::DerError {
-                        der_error: format!("Expected UTF8String for description, found {}", other.tag().to_name()),
+                        der_error: format!(
+                            "Expected UTF8String or Null for description, found {}",
+                            other.tag().to_name()
+                        ),
                     });
                 }
             }
         } else if children.len() == 5 {
             match &children[4] {
                 ASN1Element::UTF8String(s) => Some(s.clone()),
-                _ => None,
+                ASN1Element::Null => None,
+                ASN1Element::Sequence(_) => None, // 5-element SEQUENCE with product at index 4, no description
+                other => {
+                    return Err(ShoppingItemError::DerError {
+                        der_error: format!(
+                            "Expected UTF8String, Null, or SEQUENCE for description at index 4 (5-element SEQUENCE), found {}",
+                            other.tag().to_name()
+                        ),
+                    });
+                }
             }
         } else {
             None
